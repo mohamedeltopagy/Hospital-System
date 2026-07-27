@@ -157,7 +157,19 @@ export default function PatientsDirectoryPage() {
                     </div>
                     <div>
                       <h3 className="font-bold text-lg text-foreground group-hover:text-sky-600 transition-colors">{patient.name}</h3>
-                      <span className="text-xs text-muted-foreground font-mono">ID: #{patient.id} • @{patient.username}</span>
+                      <div className="flex items-center flex-wrap gap-2 text-xs text-muted-foreground font-mono mt-1">
+                        <span>ID: #{patient.id} • @{patient.username}</span>
+                        {patient.dateOfBirth && (
+                          <span className="font-semibold px-2 py-0.5 rounded-md bg-secondary/80">
+                            {isEn ? "Age: " : "العمر: "}{Math.floor((new Date().getTime() - new Date(patient.dateOfBirth).getTime()) / 31557600000)}
+                          </span>
+                        )}
+                        {patient.gender && (
+                          <span className="font-semibold px-2 py-0.5 rounded-md bg-secondary/80">
+                            {patient.gender === 'male' ? (isEn ? "Male" : "ذكر") : (isEn ? "Female" : "أنثى")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <span className="p-2 rounded-xl bg-secondary text-muted-foreground group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors">
@@ -196,9 +208,21 @@ export default function PatientsDirectoryPage() {
                   </DialogDescription>
                 </div>
               </div>
-              <span className="px-3 py-1 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 font-bold text-xs border border-sky-200">
-                {isEn ? "Patient ID:" : "رقم المريض:"} #{selectedPatientId}
-              </span>
+              <div className="flex items-center gap-2">
+                {summary?.patient?.dateOfBirth && (
+                  <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs border">
+                    {isEn ? "Age: " : "العمر: "}{Math.floor((new Date().getTime() - new Date(summary.patient.dateOfBirth).getTime()) / 31557600000)}
+                  </span>
+                )}
+                {summary?.patient?.gender && (
+                  <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs border">
+                    {summary.patient.gender === 'male' ? (isEn ? "Male" : "ذكر") : (isEn ? "Female" : "أنثى")}
+                  </span>
+                )}
+                <span className="px-3 py-1 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 font-bold text-xs border border-sky-200">
+                  {isEn ? "Patient ID:" : "رقم المريض:"} #{selectedPatientId}
+                </span>
+              </div>
             </div>
           </DialogHeader>
 

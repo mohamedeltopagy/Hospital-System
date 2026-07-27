@@ -17,9 +17,10 @@ import { useUser } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useAppointments, useUpdateAppointment } from "@/hooks/use-appointments";
 import { useServices, useClinics, useDoctors } from "@/hooks/use-clinics";
+import { usePaymentMethods, useInvoices, useAddPaymentMethod, usePayInvoice } from "@/hooks/use-payments";
 
 // Global supported currencies dictionary with exchange rates relative to SAR (1 SAR base)
-export const CURRENCIES: Record<string, { code: string; nameAr: string; nameEn: string; symbol: string; rate: number; flag: string }> = {
+const CURRENCIES: Record<string, { code: string; nameAr: string; nameEn: string; symbol: string; rate: number; flag: string }> = {
   SAR: { code: "SAR", nameAr: "الريال السعودي", nameEn: "Saudi Riyal", symbol: "ر.س", rate: 1.0, flag: "🇸🇦" },
   EGP: { code: "EGP", nameAr: "الجنيه المصري", nameEn: "Egyptian Pound", symbol: "ج.م", rate: 13.25, flag: "🇪🇬" },
   USD: { code: "USD", nameAr: "الدولار الأمريكي", nameEn: "US Dollar", symbol: "$", rate: 0.266, flag: "🇺🇸" },
@@ -79,33 +80,43 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
     return srv ? srv.price : 200;
   };
 
-  const [methods, setMethods] = useState<PaymentMethodItem[]>([
-    { id: "m1", type: isEn ? "Bank Card" : "بطاقة بنكية", last4: "4242", expiry: "12/26", provider: isEn ? "Visa Platinum" : "فيزا بلاتينيوم", icon: CreditCard, primary: true },
-    { id: "m2", type: isEn ? "Health Insurance" : "تأمين صحي", provider: isEn ? "Bupa Arabia" : "بوبا العربية", policyId: "987***21", icon: ShieldCheck, primary: false },
-    { id: "m3", type: isEn ? "E-Wallet" : "محفظة إلكترونية", balance: isEn ? "150.00 SAR" : "150.00 ر.س", icon: Wallet, primary: false },
-  ]);
+  const { data: serverMethods = [] } = usePaymentMethods();
+  const { data: serverInvoices = [] } = useInvoices();
+  const addMethodMutation = useAddPaymentMethod();
+  const payMutation = usePayInvoice();
 
-  const transactions = appointments.map((appt) => {
-    const srv = services.find(s => s.clinicId === appt.clinicId);
-    const cln = clinics.find(c => c.id === appt.clinicId);
-    const amount = getApptPrice(appt.clinicId);
-    const isPaid = appt.status === 'completed' || appt.status === 'confirmed';
-    const dateStr = new Date(appt.datetime).toLocaleDateString(isEn ? "en-US" : "ar-SA");
+  const methods = serverMethods.length > 0 ? serverMethods.map((m: any) => ({
+    id: m.id,
+    type: m.type === "card" ? (isEn ? "Bank Card" : "بطاقة بنكية") : m.type === "insurance" ? (isEn ? "Health Insurance" : "تأمين صحي") : (isEn ? "E-Wallet" : "محفظة إلكترونية"),
+    last4: m.last4,
+    expiry: m.expiry,
+    provider: m.provider,
+    policyId: m.policyId,
+    icon: m.type === "card" ? CreditCard : m.type === "insurance" ? ShieldCheck : Wallet,
+    primary: m.isPrimary,
+  })) : [];
+
+  const transactions = serverInvoices.map((inv: any) => {
+    const appt = appointments.find(a => a.id === inv.appointmentId);
+    const srv = appt ? services.find(s => s.clinicId === appt.clinicId) : null;
+    const cln = appt ? clinics.find(c => c.id === appt.clinicId) : null;
+    const isPaid = inv.status === 'paid';
+    const dateStr = new Date(inv.date).toLocaleDateString(isEn ? "en-US" : "ar-SA");
     return {
-      id: `INV-${appt.id + 1000}`,
-      apptId: appt.id,
+      id: inv.id,
+      invoiceNumber: `INV-${inv.id + 1000}`,
+      apptId: inv.appointmentId,
       date: dateStr,
-      service: srv?.name || cln?.name || (isEn ? "General Consultation" : "كشف عيادة"),
-      amount: amount,
-      status: isPaid ? (isEn ? "Paid" : "مدفوع") : appt.status === 'cancelled' ? (isEn ? "Cancelled" : "ملغي") : (isEn ? "Pending" : "قيد الانتظار"),
-      paidMethod: isPaid ? (isEn ? "Electronic Card" : "بطاقة إلكترونية") : undefined,
-      paidCurrency: isPaid ? "SAR" : undefined
+      service: inv.description || srv?.name || cln?.name || (isEn ? "Medical Service" : "خدمة طبية"),
+      amount: inv.amount,
+      status: isPaid ? (isEn ? "Paid" : "مدفوع") : inv.status === 'cancelled' ? (isEn ? "Cancelled" : "ملغي") : (isEn ? "Pending" : "قيد الانتظار"),
+      rawStatus: inv.status,
     };
   });
 
-  const dueAmount = appointments
-    .filter(a => a.status === 'pending')
-    .reduce((sum, a) => sum + getApptPrice(a.clinicId), 0);
+  const dueAmount = serverInvoices
+    .filter((inv: any) => inv.status === 'pending')
+    .reduce((sum: number, inv: any) => sum + inv.amount, 0);
 
   // Dialog states
   const [isAddOpen, setAddOpen] = useState(false);
@@ -134,35 +145,34 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
     setPayOpen(true);
   };
 
-  const handleAddMethod = (e: React.FormEvent) => {
+  const handleAddMethod = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCardNum && !newProvider && newType !== "wallet") {
       toast({ title: isEn ? "Error" : "تنبيه", description: isEn ? "Please fill in required fields" : "يرجى تعبئة الحقول المطلوبة", variant: "destructive" });
       return;
     }
 
-    const newMethodObj: PaymentMethodItem = {
-      id: "m" + Date.now(),
-      type: newType === "card" ? (isEn ? "Bank Card" : "بطاقة بنكية") : newType === "insurance" ? (isEn ? "Health Insurance" : "تأمين صحي") : (isEn ? "E-Wallet" : "محفظة إلكترونية"),
-      last4: newCardNum ? newCardNum.slice(-4) : "8899",
-      expiry: newExpiry || "08/28",
-      provider: newProvider || (newType === "card" ? "MasterCard" : newType === "insurance" ? (isEn ? "Tawuniya" : "التعاونية") : (isEn ? "STC Pay" : "STC Pay")),
-      balance: newType === "wallet" ? (isEn ? "300.00 SAR" : "300.00 ر.س") : undefined,
-      policyId: newType === "insurance" ? "POL-5541" : undefined,
-      icon: newType === "card" ? CreditCard : newType === "insurance" ? ShieldCheck : Wallet,
-      primary: methods.length === 0,
-    };
+    try {
+      await addMethodMutation.mutateAsync({
+        type: newType,
+        provider: newProvider || (newType === "card" ? "MasterCard" : newType === "insurance" ? "Tawuniya" : "STC Pay"),
+        last4: newCardNum ? newCardNum.slice(-4) : "8899",
+        expiry: newExpiry || "08/28",
+        policyId: newType === "insurance" ? "POL-5541" : undefined,
+      });
 
-    setMethods([...methods, newMethodObj]);
-    setAddOpen(false);
-    setNewCardNum("");
-    setNewExpiry("");
-    setNewProvider("");
+      setAddOpen(false);
+      setNewCardNum("");
+      setNewExpiry("");
+      setNewProvider("");
 
-    toast({
-      title: isEn ? "Method Added" : "تمت الإضافة بنجاح",
-      description: isEn ? "Your payment method has been saved securely." : "تم تسجيل طريقة الدفع الخاصة بك في النظام بأمان.",
-    });
+      toast({
+        title: isEn ? "Method Added" : "تمت الإضافة بنجاح",
+        description: isEn ? "Your payment method has been saved securely." : "تم تسجيل طريقة الدفع الخاصة بك في النظام بأمان.",
+      });
+    } catch (err) {
+      toast({ title: isEn ? "Error" : "خطأ", description: isEn ? "Failed to add method" : "فشلت إضافة طريقة الدفع", variant: "destructive" });
+    }
   };
 
   const handleSetPrimary = (id: string) => {
@@ -179,41 +189,60 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
     toast({ title: isEn ? "Deleted" : "تم الحذف", description: isEn ? "Payment method removed successfully." : "تم حذف طريقة الدفع من حسابك." });
   };
 
-  const handleConfirmPay = () => {
+  const handleConfirmPay = async () => {
     setProcessing(true);
-    setTimeout(() => {
-      setProcessing(false);
-      
-      let chosenLabel = "";
-      if (checkoutCustomType) {
-        if (checkoutCustomType === "apple_pay") chosenLabel = isEn ? "Apple Pay" : "Apple Pay (دفع سريع)";
-        else if (checkoutCustomType === "mada_instant") chosenLabel = isEn ? "Mada Debit Card" : "بطاقة مدى البنكية (فوري)";
-        else if (checkoutCustomType === "stc_pay") chosenLabel = isEn ? "STC Pay Wallet" : "محفظة STC Pay الإلكترونية";
-        else if (checkoutCustomType === "cash_reception") chosenLabel = isEn ? "Cash at Reception" : "الدفع نقداً عند مكتب الاستقبال";
+    
+    let chosenLabel = "";
+    if (checkoutCustomType) {
+      if (checkoutCustomType === "apple_pay") chosenLabel = isEn ? "Apple Pay" : "Apple Pay (دفع سريع)";
+      else if (checkoutCustomType === "mada_instant") chosenLabel = isEn ? "Mada Debit Card" : "بطاقة مدى البنكية (فوري)";
+      else if (checkoutCustomType === "stc_pay") chosenLabel = isEn ? "STC Pay Wallet" : "محفظة STC Pay الإلكترونية";
+      else if (checkoutCustomType === "cash_reception") chosenLabel = isEn ? "Cash at Reception" : "الدفع نقداً عند مكتب الاستقبال";
+    } else {
+      const found = methods.find(m => m.id === checkoutMethodId);
+      if (found) {
+        chosenLabel = `${found.type} ${found.last4 ? `(**** ${found.last4})` : `(${found.provider})`}`;
       } else {
-        const found = methods.find(m => m.id === checkoutMethodId);
-        if (found) {
-          chosenLabel = `${found.type} ${found.last4 ? `(**** ${found.last4})` : `(${found.provider})`}`;
-        } else {
-          chosenLabel = isEn ? "Bank Card" : "بطاقة إلكترونية";
-        }
+        chosenLabel = isEn ? "Bank Card" : "بطاقة إلكترونية";
+      }
+    }
+
+    try {
+      const pendingInvoices = serverInvoices.filter((inv: any) => inv.status === 'pending');
+      for (const inv of pendingInvoices) {
+        await payMutation.mutateAsync({
+          invoiceId: inv.id,
+          // If custom type, we mock it with methodId 1 (or the primary method) because backend expects an ID. 
+          // In a real scenario, this would be a gateway transaction ID.
+          methodId: checkoutCustomType ? (methods[0]?.id || 1) : Number(checkoutMethodId),
+          customType: checkoutCustomType || undefined
+        });
       }
 
-      appointments.filter(a => a.status === 'pending').forEach((appt) => {
-        updateAppt.mutate({ id: appt.id, data: { status: 'confirmed' } });
-      });
-
+      setProcessing(false);
       setPayOpen(false);
       const paidCurrObj = CURRENCIES[checkoutCurrency] || CURRENCIES.SAR;
       const convertedAmt = (dueAmount * paidCurrObj.rate).toFixed(2);
 
-      toast({
-        title: isEn ? "Payment Successful!" : "تم سداد الفاتورة بنجاح!",
-        description: isEn 
-          ? `Paid ${convertedAmt} ${paidCurrObj.code} using ${chosenLabel}. Receipt generated.`
-          : `تم سداد مبلغ (${convertedAmt} ${paidCurrObj.symbol}) باستخدام: ${chosenLabel}. تم تأكيد الموعد وإصدار الفاتورة الإلكترونية.`
-      });
-    }, 1200);
+      if (checkoutCustomType === "cash_reception") {
+        toast({
+          title: isEn ? "Appointment Confirmed!" : "تم تأكيد الموعد!",
+          description: isEn 
+            ? `Please pay ${convertedAmt} ${paidCurrObj.code} at the reception upon arrival.`
+            : `يرجى التوجه لمكتب الاستقبال لسداد مبلغ (${convertedAmt} ${paidCurrObj.symbol}) عند الوصول.`
+        });
+      } else {
+        toast({
+          title: isEn ? "Payment Successful!" : "تم سداد الفاتورة بنجاح!",
+          description: isEn 
+            ? `Paid ${convertedAmt} ${paidCurrObj.code} using ${chosenLabel}. Receipt generated.`
+            : `تم سداد مبلغ (${convertedAmt} ${paidCurrObj.symbol}) باستخدام: ${chosenLabel}. تم تأكيد الموعد وإصدار الفاتورة الإلكترونية.`
+        });
+      }
+    } catch (e) {
+      setProcessing(false);
+      toast({ title: isEn ? "Payment Failed" : "فشلت عملية الدفع", description: isEn ? "An error occurred." : "حدث خطأ أثناء معالجة الدفع.", variant: "destructive" });
+    }
   };
 
   return (
@@ -387,12 +416,11 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
                  <>
                    <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/15 space-y-2">
                      <div className="flex justify-between text-sm font-medium">
-                       <span className="opacity-90">{isEn ? "Pending Invoice (INV-1025)" : "فاتورة مستحقة (INV-1025)"}</span>
+                       <span className="opacity-90">{isEn ? "Outstanding Balance" : "إجمالي الفواتير المستحقة"}</span>
                        <span className="font-bold">{formatCurrency(dueAmount, currency, isEn)}</span>
                      </div>
                      <div className="text-xs text-white/70 flex items-center justify-between">
-                       <span>{isEn ? "Full Blood Analysis Examination" : "كشف وتحليل دم شامل بالعيادة"}</span>
-                       {currency !== "SAR" && <span className="text-[10px] opacity-80">(Base: 350 SAR)</span>}
+                       <span>{isEn ? "Please pay to proceed with services" : "يرجى السداد لتتمكن من استكمال الخدمات الطبية"}</span>
                      </div>
                      <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mt-1">
                        <div className="w-full h-full bg-white rounded-full"></div>

@@ -38,11 +38,16 @@ export function useDoctors() {
   });
 }
 
-export function useServices(clinicId?: number) {
+export function useServices(clinicId?: number | null, category?: string) {
   return useQuery({
-    queryKey: [api.services.list.path, clinicId],
+    queryKey: [api.services.list.path, clinicId, category],
     queryFn: async () => {
-      const url = clinicId ? `${api.services.list.path}?clinicId=${clinicId}` : api.services.list.path;
+      let url = api.services.list.path;
+      const params = new URLSearchParams();
+      if (clinicId) params.append("clinicId", clinicId.toString());
+      if (category) params.append("category", category);
+      if (params.toString()) url += `?${params.toString()}`;
+      
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch services");
       return api.services.list.responses[200].parse(await res.json());

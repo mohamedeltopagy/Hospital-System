@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useTreatmentPlans, useCreateTreatmentPlan } from "@/hooks/use-records";
+import { useTreatmentPlans, useCreateTreatmentPlan, useCreatePrescription, useCreateLabRequest } from "@/hooks/use-records";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { arEG } from "date-fns/locale";
-import { Pill, CalendarClock, Plus, Edit3, Trash2, Printer, Building2, Eye, CheckCircle2 } from "lucide-react";
+import { Pill, CalendarClock, Plus, Edit3, Trash2, Printer, Building2, Eye, CheckCircle2, Microscope, Send, ClipboardList } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useUser } from "@/hooks/use-auth";
-import { useDoctors } from "@/hooks/use-clinics";
+import { useDoctors, useServices } from "@/hooks/use-clinics";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -31,9 +31,13 @@ export default function TreatmentPlansPage() {
   const { data: plans, isLoading } = useTreatmentPlans();
   const { data: doctors } = useDoctors();
   const createMutation = useCreateTreatmentPlan();
+  const createRxMutation = useCreatePrescription();
+  const createLabMutation = useCreateLabRequest();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const isEn = typeof document !== 'undefined' && document.documentElement.lang === 'en';
+
+  const [activeTab, setActiveTab] = useState<'plan' | 'pharmacy' | 'lab'>('plan');
 
   const { data: patients } = useQuery({
     queryKey: ['/api/patients'],
@@ -60,14 +64,43 @@ export default function TreatmentPlansPage() {
     },
   });
 
+  // Separate states for simple pharmacy/lab forms
+  const [rxForm, setRxForm] = useState({ patientId: 0, medicationName: "", dosage: "", frequency: "", duration: "", notes: "", serviceId: 0 });
+  const [labForm, setLabForm] = useState({ patientId: 0, testType: "تحليل دم", testName: "", instructions: "", serviceId: 0 });
+
+  const { data: pharmacyServices } = useServices(null, "pharmacy");
+  const { data: labServices } = useServices(null, "lab");
+
   const onSubmit = (data: any) => {
     createMutation.mutate(data, {
       onSuccess: () => {
         form.reset();
         toast({
-          title: isEn ? "Prescription Issued" : "تم إصدار الروشتة والخطة العلاجية",
-          description: isEn ? "Saved to patient medical file." : "تم حفظ الخطة الدوائية وإتاحتها للمريض بنجاح.",
+          title: isEn ? "Plan Saved" : "تم حفظ الخطة",
+          description: isEn ? "Treatment plan saved successfully." : "تم حفظ الخطة العلاجية بنجاح."
         });
+      }
+    });
+  };
+
+  const handleSendToPharmacy = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rxForm.patientId || !rxForm.medicationName) return toast({ title: isEn ? "Missing Data" : "بيانات ناقصة", description: isEn ? "Please fill patient and medication name." : "يرجى اختيار المريض وكتابة الدواء.", variant: "destructive" });
+    createRxMutation.mutate(rxForm, {
+      onSuccess: () => {
+        setRxForm({ patientId: rxForm.patientId, medicationName: "", dosage: "", frequency: "", duration: "", notes: "", serviceId: 0 });
+        toast({ title: isEn ? "Sent to Pharmacy" : "تم الإرسال للصيدلية", description: isEn ? "Prescription sent to pharmacy system." : "تم تحويل الأدوية لنظام الصيدلية ليتم صرفها." });
+      }
+    });
+  };
+
+  const handleSendToLab = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!labForm.patientId || !labForm.testName) return toast({ title: isEn ? "Missing Data" : "بيانات ناقصة", description: isEn ? "Please fill patient and test name." : "يرجى اختيار المريض وكتابة اسم التحليل.", variant: "destructive" });
+    createLabMutation.mutate(labForm, {
+      onSuccess: () => {
+        setLabForm({ patientId: labForm.patientId, testType: "تحليل دم", testName: "", instructions: "", serviceId: 0 });
+        toast({ title: isEn ? "Sent to Lab" : "تم الإرسال للمعمل", description: isEn ? "Request sent to laboratory system." : "تم تحويل طلب الفحص للمعمل بنجاح." });
       }
     });
   };
@@ -125,26 +158,46 @@ export default function TreatmentPlansPage() {
       <div className="space-y-2 border-b pb-6">
         <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
           <div className="p-2 bg-purple-100 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400 rounded-lg">
-            <Pill className="w-6 h-6" />
+            <ClipboardList className="w-6 h-6" />
           </div>
-          {isEn ? "Treatment Plans & Prescriptions (Rx)" : "خطط العلاج والروشتات الطبية (Rx)"}
+          {isEn ? "Treatment, Pharmacy & Lab" : "الخطة العلاجية والصيدلية والمعمل"}
         </h1>
         <p className="text-muted-foreground text-lg">
           {user?.role === 'doctor' 
-             ? (isEn ? "Write prescriptions, long-term plans, and printable Rx documents." : "كتابة الوصفات الطبية الدقيقة، الجرعات، وإصدار روشتات معتمدة قابلة للطباعة.")
+             ? (isEn ? "Manage treatment plans, send prescriptions to pharmacy, and request lab tests." : "كتابة الخطط العلاجية، تحويل الأدوية للصيدلية، وإرسال طلبات الأشعة والتحاليل للمعمل.")
              : (isEn ? "Prescribed treatment plans and current active medications." : "الخطط العلاجية الموصوفة والأدوية الحالية مع مواعيد الجرعات.")}
         </p>
       </div>
 
       {(user?.role === 'doctor' || user?.role === 'admin') && (
         <Card className="border-2 border-purple-100 dark:border-purple-900/40 shadow-sm mb-8">
-          <CardHeader className="bg-purple-50/50 dark:bg-purple-950/30 pb-4">
-            <CardTitle className="text-xl text-purple-800 dark:text-purple-300 flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              {isEn ? "Create New Prescription / Treatment Plan" : "وصف روشتة أو خطة علاجية جديدة"}
-            </CardTitle>
+          <CardHeader className="bg-purple-50/50 dark:bg-purple-950/30 pb-0">
+            <div className="flex items-center gap-2 border-b">
+              <button 
+                onClick={() => setActiveTab('plan')}
+                className={`px-4 py-3 font-bold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'plan' ? 'border-purple-600 text-purple-700' : 'border-transparent text-muted-foreground hover:bg-black/5'}`}
+              >
+                <ClipboardList className="w-5 h-5" />
+                {isEn ? "Treatment Plan" : "خطة علاجية"}
+              </button>
+              <button 
+                onClick={() => setActiveTab('pharmacy')}
+                className={`px-4 py-3 font-bold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'pharmacy' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-muted-foreground hover:bg-black/5'}`}
+              >
+                <Pill className="w-5 h-5" />
+                {isEn ? "Send to Pharmacy" : "تحويل للصيدلية"}
+              </button>
+              <button 
+                onClick={() => setActiveTab('lab')}
+                className={`px-4 py-3 font-bold border-b-2 transition-all flex items-center gap-2 ${activeTab === 'lab' ? 'border-blue-600 text-blue-700' : 'border-transparent text-muted-foreground hover:bg-black/5'}`}
+              >
+                <Microscope className="w-5 h-5" />
+                {isEn ? "Lab / X-Ray Request" : "طلب معمل/أشعة"}
+              </button>
+            </div>
           </CardHeader>
           <CardContent className="p-6">
+            {activeTab === 'plan' && (
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{isEn ? "Select Patient" : "اختر المريض"}</label>
@@ -190,10 +243,140 @@ export default function TreatmentPlansPage() {
               <div className="md:col-span-2 flex justify-end">
                 <Button type="submit" disabled={createMutation.isPending} className="px-8 py-6 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold gap-2 shadow-md">
                   <CheckCircle2 className="w-5 h-5" />
-                  {createMutation.isPending ? (isEn ? "Saving..." : "جاري حفظ الروشتة...") : (isEn ? "Issue Prescription" : "إصدار واعتماد الروشتة")}
+                  {createMutation.isPending ? (isEn ? "Saving..." : "جاري الحفظ...") : (isEn ? "Create Plan" : "اعتماد الخطة")}
                 </Button>
               </div>
             </form>
+            )}
+
+            {activeTab === 'pharmacy' && (
+              <form onSubmit={handleSendToPharmacy} className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2">
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-sm font-medium">{isEn ? "Select Patient" : "اختر المريض"}</label>
+                  <Select onValueChange={(v) => setRxForm({...rxForm, patientId: parseInt(v)})} value={rxForm.patientId ? rxForm.patientId.toString() : undefined}>
+                    <SelectTrigger className="w-full rounded-xl border-2 h-11 font-bold">
+                      <SelectValue placeholder={isEn ? "Select Patient..." : "اختر مريضاً..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patients?.map((p: any) => (
+                        <SelectItem key={p.id} value={p.id.toString()} className="font-semibold">{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{isEn ? "Medication Name" : "اسم الدواء (من القائمة)"}</label>
+                  <Select 
+                    onValueChange={(v) => {
+                      const selected = pharmacyServices?.find(s => s.id === parseInt(v));
+                      if (selected) {
+                        setRxForm({...rxForm, serviceId: selected.id, medicationName: selected.name});
+                      }
+                    }} 
+                    value={rxForm.serviceId ? rxForm.serviceId.toString() : undefined}
+                  >
+                    <SelectTrigger className="w-full rounded-xl border-2 h-11 font-bold">
+                      <SelectValue placeholder={isEn ? "Select Medication..." : "اختر الدواء..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pharmacyServices?.map((srv) => (
+                        <SelectItem key={srv.id} value={srv.id.toString()} className="font-semibold">
+                          {srv.name} <span className="text-muted-foreground text-xs mx-2">({srv.price} ر.س)</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{isEn ? "Dosage" : "الجرعة"}</label>
+                  <Input required placeholder="500mg" value={rxForm.dosage} onChange={e => setRxForm({...rxForm, dosage: e.target.value})} className="rounded-xl border-2 h-11" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{isEn ? "Frequency" : "التكرار (مثال: مرتين يومياً)"}</label>
+                  <Input required placeholder="Twice a day" value={rxForm.frequency} onChange={e => setRxForm({...rxForm, frequency: e.target.value})} className="rounded-xl border-2 h-11" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{isEn ? "Duration" : "المدة (مثال: 5 أيام)"}</label>
+                  <Input required placeholder="5 days" value={rxForm.duration} onChange={e => setRxForm({...rxForm, duration: e.target.value})} className="rounded-xl border-2 h-11" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-sm font-medium">{isEn ? "Pharmacist Notes" : "ملاحظات للصيدلي"}</label>
+                  <Textarea placeholder={isEn ? "Take after food..." : "يؤخذ بعد الأكل..."} value={rxForm.notes} onChange={e => setRxForm({...rxForm, notes: e.target.value})} className="rounded-xl border-2" />
+                </div>
+                <div className="md:col-span-2 flex justify-end">
+                  <Button type="submit" disabled={createRxMutation.isPending} className="px-8 py-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 shadow-md">
+                    <Send className="w-5 h-5" />
+                    {isEn ? "Send to Pharmacy" : "إرسال واعتماد للصيدلية"}
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {activeTab === 'lab' && (
+              <form onSubmit={handleSendToLab} className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2">
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-sm font-medium">{isEn ? "Select Patient" : "اختر المريض"}</label>
+                  <Select onValueChange={(v) => setLabForm({...labForm, patientId: parseInt(v)})} value={labForm.patientId ? labForm.patientId.toString() : undefined}>
+                    <SelectTrigger className="w-full rounded-xl border-2 h-11 font-bold">
+                      <SelectValue placeholder={isEn ? "Select Patient..." : "اختر مريضاً..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patients?.map((p: any) => (
+                        <SelectItem key={p.id} value={p.id.toString()} className="font-semibold">{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{isEn ? "Request Type" : "نوع الطلب"}</label>
+                  <Select onValueChange={(v) => setLabForm({...labForm, testType: v})} defaultValue={labForm.testType}>
+                    <SelectTrigger className="w-full rounded-xl border-2 h-11 font-bold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="تحليل دم">{isEn ? "Blood Test" : "تحليل دم"}</SelectItem>
+                      <SelectItem value="أشعة سينية (X-Ray)">{isEn ? "X-Ray" : "أشعة سينية (X-Ray)"}</SelectItem>
+                      <SelectItem value="أشعة مقطعية (CT)">{isEn ? "CT Scan" : "أشعة مقطعية (CT)"}</SelectItem>
+                      <SelectItem value="رنين مغناطيسي (MRI)">{isEn ? "MRI" : "رنين مغناطيسي (MRI)"}</SelectItem>
+                      <SelectItem value="تحليل أنسجة">{isEn ? "Biopsy" : "تحليل أنسجة"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{isEn ? "Test Name" : "اسم الفحص (من القائمة)"}</label>
+                  <Select 
+                    onValueChange={(v) => {
+                      const selected = labServices?.find(s => s.id === parseInt(v));
+                      if (selected) {
+                        setLabForm({...labForm, serviceId: selected.id, testName: selected.name});
+                      }
+                    }} 
+                    value={labForm.serviceId ? labForm.serviceId.toString() : undefined}
+                  >
+                    <SelectTrigger className="w-full rounded-xl border-2 h-11 font-bold">
+                      <SelectValue placeholder={isEn ? "Select Test..." : "اختر الفحص..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {labServices?.map((srv) => (
+                        <SelectItem key={srv.id} value={srv.id.toString()} className="font-semibold">
+                          {srv.name} <span className="text-muted-foreground text-xs mx-2">({srv.price} ر.س)</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-sm font-medium">{isEn ? "Lab Instructions" : "تعليمات المعمل / الملاحظات السريرية"}</label>
+                  <Textarea placeholder={isEn ? "Fasting for 8 hours..." : "صيام 8 ساعات قبل التحليل..."} value={labForm.instructions} onChange={e => setLabForm({...labForm, instructions: e.target.value})} className="rounded-xl border-2" />
+                </div>
+                <div className="md:col-span-2 flex justify-end">
+                  <Button type="submit" disabled={createLabMutation.isPending} className="px-8 py-6 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold gap-2 shadow-md">
+                    <Send className="w-5 h-5" />
+                    {isEn ? "Send to Lab" : "إرسال واعتماد للمعمل"}
+                  </Button>
+                </div>
+              </form>
+            )}
           </CardContent>
         </Card>
       )}

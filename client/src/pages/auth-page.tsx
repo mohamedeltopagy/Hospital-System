@@ -18,6 +18,8 @@ const registerSchema = z.object({
   role: z.enum(["patient", "doctor", "admin"], {
     required_error: "يرجى تحديد نوع الحساب",
   }),
+  gender: z.string().optional(),
+  dateOfBirth: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -41,7 +43,7 @@ export default function AuthPage() {
 
   const registerForm = useForm({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", username: "", password: "", role: "patient" },
+    defaultValues: { name: "", username: "", password: "", role: "patient", gender: "male", dateOfBirth: "" },
   });
 
   const handleLanguageToggle = () => {
@@ -209,6 +211,28 @@ export default function AuthPage() {
                     {isEn ? "Public registration is for Patients only. Doctors and Staff accounts must be created by the System Administrator." : "💡 ملاحظة: التسجيل العام مخصص للمرضى فقط. يتم إنشاء وتعيين حسابات الأطباء من قبل مسؤول النظام."}
                   </p>
                   {registerForm.formState.errors.role && <p className="text-xs text-destructive px-1">{registerForm.formState.errors.role.message}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2 relative">
+                    <Select onValueChange={(val) => registerForm.setValue("gender", val)} defaultValue="male">
+                      <SelectTrigger className="py-5 rounded-xl bg-white dark:bg-slate-900 border-2 w-full text-base font-normal">
+                        <SelectValue placeholder={isEn ? "Gender" : "النوع"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">{isEn ? "Male" : "ذكر"}</SelectItem>
+                        <SelectItem value="female">{isEn ? "Female" : "أنثى"}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 relative">
+                    <Input 
+                      type="date"
+                      {...registerForm.register("dateOfBirth")} 
+                      className="py-5 rounded-xl bg-white dark:bg-slate-900 border-2"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <Button 

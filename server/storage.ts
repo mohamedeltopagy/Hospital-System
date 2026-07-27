@@ -6,7 +6,11 @@ import type {
   Report, InsertReport,
   TreatmentPlan, InsertTreatmentPlan,
   Prescription, InsertPrescription,
-  Service, InsertService
+  Service, InsertService,
+  PaymentMethod, InsertPaymentMethod,
+  Invoice, InsertInvoice,
+  Transaction, InsertTransaction,
+  LabRequest, InsertLabRequest
 } from "@shared/schema";
 
 export interface IStorage {
@@ -54,11 +58,31 @@ export interface IStorage {
   updatePrescription(id: number, data: Partial<Prescription>): Promise<Prescription | undefined>;
   deletePrescription(id: number): Promise<boolean>;
 
+  getLabRequests(): Promise<LabRequest[]>;
+  getLabRequestsByPatient(patientId: number): Promise<LabRequest[]>;
+  getLabRequestsByDoctor(doctorId: number): Promise<LabRequest[]>;
+  createLabRequest(labReq: InsertLabRequest): Promise<LabRequest>;
+  updateLabRequest(id: number, data: Partial<LabRequest>): Promise<LabRequest | undefined>;
+  deleteLabRequest(id: number): Promise<boolean>;
+
   getServices(): Promise<Service[]>;
   getServicesByClinic(clinicId: number): Promise<Service[]>;
+  getServicesByCategory(category: string): Promise<Service[]>;
   createService(service: InsertService): Promise<Service>;
   updateService(id: number, data: Partial<Service>): Promise<Service | undefined>;
   deleteService(id: number): Promise<boolean>;
+
+  getPaymentMethods(patientId: number): Promise<PaymentMethod[]>;
+  createPaymentMethod(method: InsertPaymentMethod): Promise<PaymentMethod>;
+  deletePaymentMethod(id: number): Promise<boolean>;
+
+  getInvoices(patientId: number): Promise<Invoice[]>;
+  getInvoice(id: number): Promise<Invoice | undefined>;
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  updateInvoice(id: number, data: Partial<Invoice>): Promise<Invoice | undefined>;
+
+  getTransactions(patientId: number): Promise<Transaction[]>;
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
 
   cleanDatabase(): Promise<void>;
 }
@@ -71,14 +95,24 @@ export class MemoryStorage implements IStorage {
   private reports: Report[] = [];
   private treatmentPlans: TreatmentPlan[] = [];
   private prescriptions: Prescription[] = [];
+  private labRequests: LabRequest[] = [];
+  private paymentMethods: PaymentMethod[] = [];
+  private invoices: Invoice[] = [];
+  private transactions: Transaction[] = [];
   private services: Service[] = [
-    { id: 1, clinicId: 1, name: "كشف استشارة عيادة الباطنة العامة", price: 200, description: "كشف شامل وتشخيص مبدئي للمريض مع قياس العلامات الحيوية" },
-    { id: 2, clinicId: 1, name: "فحص السكر التراكمي العاجل (HbA1c)", price: 150, description: "تحليل معملي فوري داخل العيادة للسكري" },
-    { id: 3, clinicId: 1, name: "تخطيط قلب كهربائي (ECG)", price: 250, description: "فحص ورسم القلب بالكمبيوتر" },
-    { id: 4, clinicId: 2, name: "كشف استشارة جراحة عامة", price: 300, description: "تقييم وتشخيص الجروح والحالات الجراحية" },
-    { id: 5, clinicId: 3, name: "كشف دوري ومتابعة نمو حديثي الولادة", price: 220, description: "فحص دوري للأطفال ومتابعة التطعيمات" }
+    { id: 1, clinicId: 1, category: "clinic", name: "كشف استشارة عيادة الباطنة العامة", price: 200, description: "كشف شامل وتشخيص مبدئي للمريض مع قياس العلامات الحيوية" },
+    { id: 2, clinicId: 1, category: "clinic", name: "فحص السكر التراكمي العاجل (HbA1c)", price: 150, description: "تحليل معملي فوري داخل العيادة للسكري" },
+    { id: 3, clinicId: 1, category: "clinic", name: "تخطيط قلب كهربائي (ECG)", price: 250, description: "فحص ورسم القلب بالكمبيوتر" },
+    { id: 4, clinicId: 2, category: "clinic", name: "كشف استشارة جراحة عامة", price: 300, description: "تقييم وتشخيص الجروح والحالات الجراحية" },
+    { id: 5, clinicId: 3, category: "clinic", name: "كشف دوري ومتابعة نمو حديثي الولادة", price: 220, description: "فحص دوري للأطفال ومتابعة التطعيمات" },
+    // Lab Mock Services
+    { id: 6, clinicId: null, category: "lab", name: "صورة دم كاملة (CBC)", price: 120, description: "فحص شامل لخلايا الدم" },
+    { id: 7, clinicId: null, category: "lab", name: "وظائف كبد وكلى", price: 250, description: "تحليل شامل لإنزيمات الكبد ووظائف الكلى" },
+    // Pharmacy Mock Services
+    { id: 8, clinicId: null, category: "pharmacy", name: "Panadol Advance 500mg", price: 15, description: "مسكن للآلام وخافض للحرارة" },
+    { id: 9, clinicId: null, category: "pharmacy", name: "Augmentin 1g", price: 85, description: "مضاد حيوي واسع المجال" }
   ];
-  private nextId = { user: 1, clinic: 1, appointment: 1, history: 1, report: 1, plan: 1, prescription: 1, service: 6 };
+  private nextId = { user: 1, clinic: 1, appointment: 1, history: 1, report: 1, plan: 1, prescription: 1, labRequest: 1, service: 10, paymentMethod: 1, invoice: 1, transaction: 1 };
 
   async cleanDatabase(): Promise<void> {
     this.appointments = [];
@@ -86,7 +120,11 @@ export class MemoryStorage implements IStorage {
     this.reports = [];
     this.treatmentPlans = [];
     this.prescriptions = [];
+    this.labRequests = [];
     this.services = [];
+    this.paymentMethods = [];
+    this.invoices = [];
+    this.transactions = [];
     // Keep root admin account so admin can continue adding doctors/patients, wipe all other users (doctors/patients)
     this.users = this.users.filter(u => u.username === 'admin1' || u.role === 'admin');
     // Reset clinic doctor counts
@@ -96,7 +134,11 @@ export class MemoryStorage implements IStorage {
     this.nextId.report = 1;
     this.nextId.plan = 1;
     this.nextId.prescription = 1;
+    this.nextId.labRequest = 1;
     this.nextId.service = 1;
+    this.nextId.paymentMethod = 1;
+    this.nextId.invoice = 1;
+    this.nextId.transaction = 1;
   }
 
   async getUser(id: number) { return this.users.find(u => u.id === id); }
@@ -151,9 +193,21 @@ export class MemoryStorage implements IStorage {
   async getAppointmentsByPatient(patientId: number) { return this.appointments.filter(a => a.patientId === patientId); }
   async getAppointmentsByDoctor(doctorId: number) { return this.appointments.filter(a => a.doctorId === doctorId); }
   async createAppointment(data: InsertAppointment): Promise<Appointment> {
-    const appt: Appointment = { id: this.nextId.appointment++, status: 'pending', notes: null, ...data };
-    this.appointments.push(appt);
-    return appt;
+    const appointment: Appointment = { id: this.nextId.appointment++, status: "pending", notes: null, ...data };
+    this.appointments.push(appointment);
+    
+    // Auto-generate invoice
+    let price = 200;
+    const service = this.services.find(s => s.clinicId === data.clinicId);
+    if (service) price = service.price;
+    
+    this.createInvoice({
+      patientId: data.patientId,
+      appointmentId: appointment.id,
+      amount: price,
+    });
+    
+    return appointment;
   }
   async updateAppointment(id: number, data: Partial<Appointment>): Promise<Appointment | undefined> {
     const idx = this.appointments.findIndex(a => a.id === id);
@@ -244,10 +298,38 @@ export class MemoryStorage implements IStorage {
     return this.prescriptions.length < initialLen;
   }
 
+  async getLabRequests() { return this.labRequests; }
+  async getLabRequestsByPatient(patientId: number) { return this.labRequests.filter(l => l.patientId === patientId); }
+  async getLabRequestsByDoctor(doctorId: number) { return this.labRequests.filter(l => l.doctorId === doctorId); }
+  async createLabRequest(data: InsertLabRequest): Promise<LabRequest> {
+    const labReq: LabRequest = { id: this.nextId.labRequest++, date: new Date(), status: 'pending', instructions: null, result: null, ...data };
+    this.labRequests.push(labReq);
+    return labReq;
+  }
+  async updateLabRequest(id: number, data: Partial<LabRequest>): Promise<LabRequest | undefined> {
+    const idx = this.labRequests.findIndex(l => l.id === id);
+    if (idx === -1) return undefined;
+    this.labRequests[idx] = { ...this.labRequests[idx], ...data };
+    return this.labRequests[idx];
+  }
+  async deleteLabRequest(id: number): Promise<boolean> {
+    const initialLen = this.labRequests.length;
+    this.labRequests = this.labRequests.filter(l => l.id !== id);
+    return this.labRequests.length < initialLen;
+  }
+
   async getServices() { return this.services; }
   async getServicesByClinic(clinicId: number) { return this.services.filter(s => s.clinicId === clinicId); }
+  async getServicesByCategory(category: string) { return this.services.filter(s => s.category === category); }
+
   async createService(data: InsertService): Promise<Service> {
-    const service: Service = { id: this.nextId.service++, description: null, ...data };
+    const service: Service = { 
+      id: this.nextId.service++, 
+      clinicId: data.clinicId || null, 
+      category: data.category || "clinic",
+      description: null, 
+      ...data 
+    };
     this.services.push(service);
     return service;
   }
@@ -261,6 +343,39 @@ export class MemoryStorage implements IStorage {
     const initialLen = this.services.length;
     this.services = this.services.filter(s => s.id !== id);
     return this.services.length < initialLen;
+  }
+
+  async getPaymentMethods(patientId: number) { return this.paymentMethods.filter(m => m.patientId === patientId); }
+  async createPaymentMethod(data: InsertPaymentMethod): Promise<PaymentMethod> {
+    const method: PaymentMethod = { id: this.nextId.paymentMethod++, isPrimary: false, last4: null, expiry: null, policyId: null, ...data };
+    this.paymentMethods.push(method);
+    return method;
+  }
+  async deletePaymentMethod(id: number): Promise<boolean> {
+    const initialLen = this.paymentMethods.length;
+    this.paymentMethods = this.paymentMethods.filter(m => m.id !== id);
+    return this.paymentMethods.length < initialLen;
+  }
+
+  async getInvoices(patientId: number) { return this.invoices.filter(i => i.patientId === patientId); }
+  async getInvoice(id: number) { return this.invoices.find(i => i.id === id); }
+  async createInvoice(data: InsertInvoice): Promise<Invoice> {
+    const invoice: Invoice = { id: this.nextId.invoice++, status: "pending", currency: "SAR", date: new Date(), ...data };
+    this.invoices.push(invoice);
+    return invoice;
+  }
+  async updateInvoice(id: number, data: Partial<Invoice>): Promise<Invoice | undefined> {
+    const idx = this.invoices.findIndex(i => i.id === id);
+    if (idx === -1) return undefined;
+    this.invoices[idx] = { ...this.invoices[idx], ...data };
+    return this.invoices[idx];
+  }
+
+  async getTransactions(patientId: number) { return this.transactions.filter(t => t.patientId === patientId); }
+  async createTransaction(data: InsertTransaction): Promise<Transaction> {
+    const transaction: Transaction = { id: this.nextId.transaction++, status: "success", date: new Date(), ...data };
+    this.transactions.push(transaction);
+    return transaction;
   }
 }
 

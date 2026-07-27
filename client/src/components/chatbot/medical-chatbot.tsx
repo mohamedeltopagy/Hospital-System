@@ -68,17 +68,7 @@ export function MedicalChatbot() {
     };
   }, []);
 
-  // Send opening greeting from AI on first load
-  useEffect(() => {
-    if (!hasStarted) {
-      setHasStarted(true);
-      sendToAI(
-        isEn ? "Hello, start the conversation" : "مرحبا ابدأ المحادثة",
-        [],
-        true
-      );
-    }
-  }, []);
+  // We rely on the second useEffect below to handle both initial load and resets
 
   const speak = useCallback((text: string) => {
     if (!voiceEnabled || !synthRef.current) return;
@@ -112,12 +102,19 @@ export function MedicalChatbot() {
   ) => {
     setIsLoading(true);
     try {
+      // Add a long timeout of 45 seconds so the UI waits while backend silently retries
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ message: userText, history: currentHistory }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!res.ok) throw new Error("API error");
       const data = await res.json();

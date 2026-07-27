@@ -21,6 +21,8 @@ import TreatmentPlansPage from "@/pages/treatment-plans";
 import SettingsPage from "@/pages/settings";
 import PaymentsPage from "@/pages/payments";
 import PatientsDirectoryPage from "@/pages/patients-directory";
+import PharmacyPage from "@/pages/pharmacy";
+import LaboratoryPage from "@/pages/laboratory";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { data: user, isLoading } = useUser();
@@ -101,6 +103,14 @@ function Router() {
 
       <Route path="/payments">
         <MainLayout><ProtectedRoute component={PaymentsPage} /></MainLayout>
+      </Route>
+
+      <Route path="/pharmacy">
+        <MainLayout><ProtectedRoute component={PharmacyPage} /></MainLayout>
+      </Route>
+
+      <Route path="/laboratory">
+        <MainLayout><ProtectedRoute component={LaboratoryPage} /></MainLayout>
       </Route>
 
       <Route>

@@ -136,12 +136,15 @@ export default function MedicalHistoryPage() {
           </p>
         </div>
 
-        {(user?.role === 'doctor' || user?.role === 'admin') && (
-          <Button onClick={() => setAddOpen(true)} size="lg" className="rounded-xl font-bold gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
-            <Plus className="w-5 h-5" />
-            {isEn ? "Add Diagnosis Record" : "تسجيل حالة مرضية جديدة"}
-          </Button>
-        )}
+        <Button onClick={() => {
+          if (user?.role === 'patient') {
+            setPatientId(String(user.id));
+          }
+          setAddOpen(true);
+        }} size="lg" className="rounded-xl font-bold gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+          <Plus className="w-5 h-5" />
+          {isEn ? "Add Medical Record" : "إضافة تاريخ مرضي"}
+        </Button>
       </div>
 
       <Card className="rounded-2xl overflow-hidden border border-border shadow-sm">
@@ -204,32 +207,30 @@ export default function MedicalHistoryPage() {
                       <TableCell className="text-foreground min-w-[280px] max-w-lg leading-relaxed">
                         {record.notes || '-'}
                       </TableCell>
-                      {(user?.role === 'doctor' || user?.role === 'admin') && (
-                        <TableCell className="text-end whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditingRecord({ ...record, date: new Date(record.date).toISOString().split('T')[0] })}
-                              title={isEn ? "Edit condition/notes" : "تعديل التشخيص والملاحظات"}
-                              className="h-8 rounded-lg text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50"
-                            >
-                              <Edit3 className="w-4 h-4 me-1" />
-                              {isEn ? "Edit" : "تعديل"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteRecord(record.id)}
-                              title={isEn ? "Delete record" : "حذف التشخيص"}
-                              className="h-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="w-4 h-4 me-1" />
-                              {isEn ? "Remove" : "حذف"}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      )}
+                      <TableCell className="text-end whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingRecord({ ...record, date: new Date(record.date).toISOString().split('T')[0] })}
+                            title={isEn ? "Edit condition/notes" : "تعديل التشخيص والملاحظات"}
+                            className="h-8 rounded-lg text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50"
+                          >
+                            <Edit3 className="w-4 h-4 me-1" />
+                            {isEn ? "Edit" : "تعديل"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteRecord(record.id)}
+                            title={isEn ? "Delete record" : "حذف التشخيص"}
+                            className="h-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-4 h-4 me-1" />
+                            {isEn ? "Remove" : "حذف"}
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -253,21 +254,23 @@ export default function MedicalHistoryPage() {
           </DialogHeader>
 
           <form onSubmit={handleAddRecord} className="space-y-4 py-2">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">{isEn ? "Select Patient" : "اختر المريض من القائمة"}</label>
-              <Select value={patientId} onValueChange={setPatientId} required>
-                <SelectTrigger className="w-full h-11 rounded-xl border-2 font-bold">
-                  <SelectValue placeholder={isEn ? "Choose patient..." : "اختر مريضاً..."} />
-                </SelectTrigger>
-                <SelectContent>
-                  {patients?.map((p: any) => (
-                    <SelectItem key={p.id} value={String(p.id)} className="font-semibold">
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {(user?.role === 'doctor' || user?.role === 'admin') && (
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">{isEn ? "Select Patient" : "اختر المريض من القائمة"}</label>
+                <Select value={patientId} onValueChange={setPatientId} required>
+                  <SelectTrigger className="w-full h-11 rounded-xl border-2 font-bold">
+                    <SelectValue placeholder={isEn ? "Choose patient..." : "اختر مريضاً..."} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {patients?.map((p: any) => (
+                      <SelectItem key={p.id} value={String(p.id)} className="font-semibold">
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-sm font-semibold">{isEn ? "Condition / Diagnosis Name" : "اسم المرض أو التشخيص الطبي"}</label>
@@ -305,7 +308,7 @@ export default function MedicalHistoryPage() {
               <Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={isSubmitting} className="rounded-xl px-5 h-11">
                 {isEn ? "Cancel" : "إلغاء"}
               </Button>
-              <Button type="submit" disabled={isSubmitting || !patientId || !condition} className="rounded-xl px-6 h-11 font-bold shadow-md bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
+              <Button type="submit" disabled={isSubmitting || (!patientId && user?.role !== 'patient') || !condition} className="rounded-xl px-6 h-11 font-bold shadow-md bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
                 <CheckCircle2 className="w-4 h-4" />
                 {isSubmitting ? (isEn ? "Saving..." : "جاري الحفظ...") : (isEn ? "Save Diagnosis" : "حفظ في السجل المرضي")}
               </Button>

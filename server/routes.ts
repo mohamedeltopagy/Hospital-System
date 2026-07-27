@@ -334,15 +334,18 @@ export async function registerRoutes(
       const userId = (req.session as any).userId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const user = await storage.getUser(userId);
-      if (user?.role !== 'doctor' && user?.role !== 'admin') {
-        return res.status(403).json({ message: "Only doctors or admins can record medical history" });
-      }
+      if (!user) return res.status(401).json({ message: "Unauthorized" });
+
       const { patientId, condition, date, notes } = req.body;
-      if (!patientId || !condition || !date) {
+      if (!condition || !date) {
         return res.status(400).json({ message: "Missing required fields" });
       }
+      
+      // If user is patient, force patientId to be their own ID
+      const targetPatientId = user.role === 'patient' ? user.id : Number(patientId);
+
       const newRecord = await storage.createMedicalHistory({
-        patientId: Number(patientId),
+        patientId: targetPatientId,
         condition,
         date: new Date(date),
         notes: notes || null
@@ -359,9 +362,7 @@ export async function registerRoutes(
       const userId = (req.session as any).userId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const user = await storage.getUser(userId);
-      if (user?.role !== 'doctor' && user?.role !== 'admin') {
-        return res.status(403).json({ message: "Forbidden" });
-      }
+      if (!user) return res.status(401).json({ message: "Unauthorized" });
       const id = Number(req.params.id);
       const { condition, date, notes } = req.body;
       const updated = await storage.updateMedicalHistory(id, {
@@ -382,9 +383,7 @@ export async function registerRoutes(
       const userId = (req.session as any).userId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const user = await storage.getUser(userId);
-      if (user?.role !== 'doctor' && user?.role !== 'admin') {
-        return res.status(403).json({ message: "Forbidden" });
-      }
+      if (!user) return res.status(401).json({ message: "Unauthorized" });
       const id = Number(req.params.id);
       const deleted = await storage.deleteMedicalHistory(id);
       if (!deleted) return res.status(404).json({ message: "Not found" });
@@ -586,10 +585,10 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const user = await storage.getUser(userId);
       if (user?.role !== 'doctor' && user?.role !== 'admin') {
-        return res.status(403).json({ message: "Forbidden: Only doctors can prescribe medications" });
+        return res.status(403).json({ message: "Forbidden: Only doctors can prescribe" });
       }
-
-      const { patientId, medicationName, dosage, frequency, duration, notes } = req.body;
+      
+      const { patientId, medicationName, dosage, frequency, duration, notes, serviceId } = req.body;
       if (!patientId || !medicationName || !dosage || !frequency || !duration) {
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -603,6 +602,22 @@ export async function registerRoutes(
         duration,
         notes: notes || null
       });
+
+      // Auto-create invoice if serviceId exists
+      if (serviceId) {
+        const service = await storage.getService(serviceId);
+        if (service) {
+          await storage.createInvoice({
+            patientId: Number(patientId),
+            appointmentId: null as any,
+            amount: service.price,
+            currency: 'SAR',
+            status: 'pending',
+            description: `صرف دواء: ${service.name}`
+          } as any);
+        }
+      }
+
       res.status(201).json(newPrescription);
     } catch (e) {
       console.error(e);
@@ -654,13 +669,118 @@ export async function registerRoutes(
     }
   });
 
+  // Lab Requests
+  app.get("/api/lab-requests", async (req, res) => {
+    const userId = (req.session as any).userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const user = await storage.getUser(userId);
+    if (user?.role === 'patient') {
+      const labs = await storage.getLabRequestsByPatient(userId);
+      res.json(labs);
+    } else if (user?.role === 'doctor') {
+      const allLabs = await storage.getLabRequests();
+      res.json(allLabs.filter(l => l.doctorId === userId));
+    } else {
+      const allLabs = await storage.getLabRequests();
+      res.json(allLabs);
+    }
+  });
+
+  app.post("/api/lab-requests", async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (user?.role !== 'doctor' && user?.role !== 'admin') {
+        return res.status(403).json({ message: "Forbidden: Only doctors can request lab tests" });
+      }
+
+      const { patientId, testType, testName, instructions, serviceId } = req.body;
+      if (!patientId || !testType || !testName) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const newLabReq = await storage.createLabRequest({
+        patientId: Number(patientId),
+        doctorId: user.id,
+        testType,
+        testName,
+        instructions: instructions || null
+      });
+
+      // Auto-create invoice if serviceId exists
+      if (serviceId) {
+        const service = await storage.getService(serviceId);
+        if (service) {
+          await storage.createInvoice({
+            patientId: Number(patientId),
+            appointmentId: null as any,
+            amount: service.price,
+            currency: 'SAR',
+            status: 'pending',
+            description: `فحص معملي/أشعة: ${service.name}`
+          } as any);
+        }
+      }
+
+      res.status(201).json(newLabReq);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error creating lab request" });
+    }
+  });
+
+  app.patch("/api/lab-requests/:id", async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const id = Number(req.params.id);
+      const { result, status } = req.body;
+      const updated = await storage.updateLabRequest(id, {
+        ...(result !== undefined ? { result } : {}),
+        ...(status ? { status } : {}),
+      });
+      if (!updated) return res.status(404).json({ message: "Lab request not found" });
+      res.json(updated);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error updating lab request" });
+    }
+  });
+
+  app.delete("/api/lab-requests/:id", async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (user?.role !== 'doctor' && user?.role !== 'admin') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const id = Number(req.params.id);
+      const deleted = await storage.deleteLabRequest(id);
+      if (!deleted) return res.status(404).json({ message: "Lab request not found" });
+      res.json({ message: "Lab request deleted successfully" });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error deleting lab request" });
+    }
+  });
+
   // Clinic Services & Prices
   app.get(api.services.list.path, async (req, res) => {
     try {
       const clinicId = req.query.clinicId ? Number(req.query.clinicId) : undefined;
-      const servicesList = clinicId 
-        ? await storage.getServicesByClinic(clinicId) 
-        : await storage.getServices();
+      const category = req.query.category as string | undefined;
+      
+      let servicesList;
+      if (category) {
+        servicesList = await storage.getServicesByCategory(category);
+      } else if (clinicId) {
+        servicesList = await storage.getServicesByClinic(clinicId);
+      } else {
+        servicesList = await storage.getServices();
+      }
+      
       res.json(servicesList);
     } catch (e) {
       console.error(e);
@@ -746,6 +866,77 @@ export async function registerRoutes(
     }
   });
 
+  // Payments
+  app.get("/api/payments/methods", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const methods = await storage.getPaymentMethods(userId);
+    res.json(methods);
+  });
+
+  app.post("/api/payments/methods", async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const { type, provider, last4, expiry, policyId } = req.body;
+      const newMethod = await storage.createPaymentMethod({
+        patientId: userId,
+        type, provider, last4, expiry, policyId, isPrimary: false
+      });
+      res.status(201).json(newMethod);
+    } catch(e) {
+      res.status(500).json({ message: "Error adding payment method" });
+    }
+  });
+
+  app.get("/api/payments/invoices", async (req, res) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const invoices = await storage.getInvoices(userId);
+    res.json(invoices);
+  });
+
+  app.post("/api/payments/pay", async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const { invoiceId, methodId, customType } = req.body;
+      
+      const invoice = await storage.getInvoice(Number(invoiceId));
+      if (!invoice || invoice.patientId !== userId) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      if (invoice.status === 'paid') {
+        return res.status(400).json({ message: "Invoice is already paid" });
+      }
+
+      if (customType === "cash_reception") {
+        // Only confirm appointment. Invoice remains pending.
+        await storage.updateAppointment(invoice.appointmentId, { status: 'confirmed' });
+        return res.json({ message: "Will pay at reception" });
+      }
+
+      // Process payment (Simulate success)
+      const transaction = await storage.createTransaction({
+        invoiceId: invoice.id,
+        patientId: userId,
+        methodId: Number(methodId),
+        amount: invoice.amount,
+        status: "success"
+      });
+
+      // Update invoice status
+      await storage.updateInvoice(invoice.id, { status: 'paid' });
+
+      // Update appointment status to confirmed
+      await storage.updateAppointment(invoice.appointmentId, { status: 'confirmed' });
+
+      res.json({ message: "Payment successful", transaction });
+    } catch(e) {
+      res.status(500).json({ message: "Payment failed" });
+    }
+  });
+
   // AI Medical Chat
   app.post("/api/chat", async (req, res) => {
     try {
@@ -753,8 +944,62 @@ export async function registerRoutes(
       if (!message || typeof message !== "string") {
         return res.status(400).json({ message: "Invalid request" });
       }
+      
+      let patientContext = null;
+      let hospitalContext = null;
+      const userId = (req.session as any)?.userId;
+
+      if (userId) {
+        const user = await storage.getUser(userId);
+        if (user && user.role === 'patient') {
+          const mHistory = await storage.getMedicalHistoryByPatient(userId);
+          patientContext = {
+            id: user.id,
+            name: user.name,
+            age: user.dateOfBirth ? Math.floor((new Date().getTime() - new Date(user.dateOfBirth).getTime()) / 31557600000) : "Unknown",
+            gender: user.gender || "Unknown",
+            medicalHistory: mHistory.length > 0 ? mHistory.map(h => h.condition + " (" + (h.notes || "") + ")").join(", ") : "None"
+          };
+        }
+      }
+
+      const clinics = await storage.getClinics();
+      const doctors = await storage.getDoctors();
+      hospitalContext = {
+        clinics: clinics.map(c => ({ id: c.id, name: c.name, description: c.description })),
+        doctors: doctors.map(d => ({ 
+          id: d.id, 
+          name: d.name, 
+          clinicId: d.clinicId,
+          workingDays: d.workingDays,
+          workingHours: d.workingHours
+        }))
+      };
+
       const chatHistory: ChatMessage[] = Array.isArray(history) ? history : [];
-      const reply = await getMedicalResponse(message, chatHistory);
+      let reply = await getMedicalResponse(message, chatHistory, patientContext, hospitalContext);
+
+      // Check if AI wants to book an appointment
+      const actionMatch = reply.match(/\[ACTION:BOOK_APPOINTMENT,\s*(\{.*?\})\s*\]/is);
+      if (actionMatch && userId) {
+        try {
+          const actionData = JSON.parse(actionMatch[1]);
+          await storage.createAppointment({
+            patientId: userId,
+            doctorId: Number(actionData.doctorId),
+            clinicId: Number(actionData.clinicId),
+            datetime: new Date(actionData.date),
+            status: "scheduled",
+            notes: "Booked automatically by AI Assistant"
+          });
+          // Remove the action block from the reply text shown to user
+          reply = reply.replace(actionMatch[0], "").trim();
+          reply += "\n\n✅ تم حجز الموعد بنجاح وإضافته إلى سجل مواعيدك!";
+        } catch(e) {
+          console.error("Failed to parse/execute AI action:", e);
+        }
+      }
+
       res.json({ reply });
     } catch (err) {
       console.error("Chat error:", err);

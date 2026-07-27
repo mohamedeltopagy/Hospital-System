@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { 
   HeartPulse, Activity, FileText, ClipboardList, 
   Calendar, CreditCard, Stethoscope, Home, ChevronDown, User, LogOut, Settings,
-  Languages, Moon, Sun, Users
+  Languages, Moon, Sun, Users, Pill, Microscope
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { 
@@ -67,6 +67,8 @@ export function AppSidebar() {
       { title: "Patient History", url: "/medical-history", icon: Activity },
       { title: "Medical Reports", url: "/reports", icon: FileText },
       { title: "Treatment Plans", url: "/treatment-plans", icon: ClipboardList },
+      { title: "Pharmacy", url: "/pharmacy", icon: Pill },
+      { title: "Laboratory", url: "/laboratory", icon: Microscope },
       { title: "Earnings & Payments", url: "/payments", icon: CreditCard },
       { title: "Settings", url: "/settings", icon: Settings },
     ] : [
@@ -77,6 +79,8 @@ export function AppSidebar() {
       { title: "التاريخ المرضي للمرضى", url: "/medical-history", icon: Activity },
       { title: "التقارير الطبية", url: "/reports", icon: FileText },
       { title: "خطط العلاج والروشتات", url: "/treatment-plans", icon: ClipboardList },
+      { title: "الصيدلية", url: "/pharmacy", icon: Pill },
+      { title: "المعمل", url: "/laboratory", icon: Microscope },
       { title: "الإعدادات", url: "/settings", icon: Settings },
       { title: "الإيرادات والمستحقات", url: "/payments", icon: CreditCard },
     ];
@@ -86,6 +90,8 @@ export function AppSidebar() {
       { title: "Patient Directory", url: "/patients", icon: Users },
       { title: "Doctors' Appointments", url: "/appointments", icon: Calendar },
       { title: "Manage Clinics", url: "/clinics", icon: Stethoscope },
+      { title: "Pharmacy", url: "/pharmacy", icon: Pill },
+      { title: "Laboratory", url: "/laboratory", icon: Microscope },
       { title: "Payments & Revenue", url: "/payments", icon: CreditCard },
       { title: "Settings", url: "/settings", icon: Settings },
     ] : [
@@ -93,6 +99,8 @@ export function AppSidebar() {
       { title: "دليل ملفات المرضى", url: "/patients", icon: Users },
       { title: "مواعيد الأطباء", url: "/appointments", icon: Calendar },
       { title: "إدارة العيادات", url: "/clinics", icon: Stethoscope },
+      { title: "الصيدلية", url: "/pharmacy", icon: Pill },
+      { title: "المعمل", url: "/laboratory", icon: Microscope },
       { title: "الدفع والإيرادات", url: "/payments", icon: CreditCard },
       { title: "الإعدادات", url: "/settings", icon: Settings },
     ];
@@ -104,6 +112,8 @@ export function AppSidebar() {
       { title: "Medical History", url: "/medical-history", icon: Activity },
       { title: "Reports", url: "/reports", icon: FileText },
       { title: "Treatment Plans", url: "/treatment-plans", icon: ClipboardList },
+      { title: "Pharmacy", url: "/pharmacy", icon: Pill },
+      { title: "Laboratory", url: "/laboratory", icon: Microscope },
       { title: "Payments", url: "/payments", icon: CreditCard },
       { title: "Settings", url: "/settings", icon: Settings },
     ] : [
@@ -112,6 +122,8 @@ export function AppSidebar() {
       { title: "التاريخ المرضي", url: "/medical-history", icon: Activity },
       { title: "التقارير", url: "/reports", icon: FileText },
       { title: "خطة العلاج", url: "/treatment-plans", icon: ClipboardList },
+      { title: "الصيدلية", url: "/pharmacy", icon: Pill },
+      { title: "المعمل", url: "/laboratory", icon: Microscope },
       { title: "طرق الدفع", url: "/payments", icon: CreditCard },
       { title: "الإعدادات", url: "/settings", icon: Settings },
     ];
