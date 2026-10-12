@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { logSecurityEvent } from "./security";
 
 export interface ChatMessage {
   role: "user" | "model";
@@ -64,6 +65,7 @@ SECURITY & ANTI-INJECTION RULES (CRITICAL):
   const forbiddenKeywords = ["ignore previous", "forget rules", "system prompt", "bypass", "jailbreak", "تجاهل الأوامر", "أوامر النظام", "تجاهل كل"];
   const lowerMessage = userMessage.toLowerCase();
   if (forbiddenKeywords.some(kw => lowerMessage.includes(kw))) {
+    logSecurityEvent("PROMPT_INJECTION_BLOCKED", "HIGH", "Client", `Blocked prompt injection attempt: "${userMessage.slice(0, 40)}"`);
     return "عفواً، لا يمكنني الاستجابة لهذا الطلب لأنه يخالف سياسات الأمان والخصوصية الخاصة بالمستشفى. كيف يمكنني مساعدتك طبياً اليوم؟";
   }
 

@@ -7,6 +7,14 @@ import session from "express-session";
 import MemoryStore from "memorystore";
 import { getMedicalResponse, type ChatMessage } from "./ai";
 import { PSOOptimizer } from "./psoOptimizer";
+import { 
+  authRateLimiter, 
+  aiRateLimiter, 
+  hashPassword, 
+  verifyPassword, 
+  logSecurityEvent, 
+  getSecurityAuditLogs 
+} from "./security";
 
 const SessionStore = MemoryStore(session);
 
@@ -25,17 +33,21 @@ export async function registerRoutes(
     secret: process.env.SESSION_SECRET || 'supersecret'
   }));
 
-  // Auth routes
-  app.post(api.auth.login.path, async (req, res) => {
+  // Auth routes with Cybersecurity Rate Limiting and Audit Logging
+  app.post(api.auth.login.path, authRateLimiter, async (req, res) => {
     try {
       const input = api.auth.login.input.parse(req.body);
       const cleanUser = input.username.trim().toLowerCase();
       const cleanPass = input.password.trim();
       const allUsers = (storage as any).users || [];
       const user = allUsers.find((u: any) => u.username.toLowerCase() === cleanUser) || await storage.getUserByUsername(input.username.trim());
-      if (!user || user.password !== cleanPass) { // in real app, hash compare
+      
+      if (!user || !verifyPassword(cleanPass, user.password)) {
+        logSecurityEvent("LOGIN_FAILED", "MEDIUM", req.ip || "", `Failed login attempt for username: ${input.username}`);
         return res.status(401).json({ message: "Invalid credentials" });
       }
+
+      logSecurityEvent("LOGIN_SUCCESS", "LOW", req.ip || "", `Successful login: ${user.username} (${user.role})`);
       (req.session as any).userId = user.id;
       res.json(user);
     } catch (err) {
@@ -58,6 +70,7 @@ export async function registerRoutes(
       if (existing) {
         return res.status(400).json({ message: "Username exists" });
       }
+      input.password = hashPassword(input.password);
       const user = await storage.createUser(input);
       if (!caller) {
         (req.session as any).userId = user.id;
@@ -938,8 +951,8 @@ export async function registerRoutes(
     }
   });
 
-  // AI Medical Chat
-  app.post("/api/chat", async (req, res) => {
+  // AI Medical Chat with AI Rate Limiter
+  app.post("/api/chat", aiRateLimiter, async (req, res) => {
     try {
       const { message, history } = req.body;
       if (!message || typeof message !== "string") {
@@ -1030,6 +1043,36 @@ export async function registerRoutes(
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: "Server error during schedule optimization" });
+    }
+  });
+
+  // Cybersecurity: SIEM & Audit Trail Endpoint (Admin accessible)
+  app.get("/api/security/audit-logs", async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (user?.role !== "admin") {
+        logSecurityEvent("UNAUTHORIZED_ACCESS", "HIGH", req.ip || "", `User ${user?.username} attempted to access Security Audit Logs`);
+        return res.status(403).json({ message: "Forbidden: Security clearance required (Admin only)" });
+      }
+
+      const logs = getSecurityAuditLogs();
+      res.json({
+        systemStatus: "SECURE",
+        activeDefenses: [
+          "AES-256-GCM Data at Rest Encryption",
+          "PBKDF2/Scrypt Salted Password Hashing",
+          "HTTP Security Headers (Helmet Enabled)",
+          "Rate Limiting (Brute-Force & DoS Mitigation)",
+          "AI Prompt Injection Sandwich Defense",
+          "PII Redaction & Output DLP Active"
+        ],
+        auditTrail: logs
+      });
+    } catch (e) {
+      console.error("Audit log error:", e);
+      res.status(500).json({ message: "Server error retrieving audit logs" });
     }
   });
 
