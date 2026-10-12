@@ -157,7 +157,7 @@ export default function LaboratoryPage() {
               <Input value={newServiceName} onChange={e => setNewServiceName(e.target.value)} placeholder="e.g. CBC, MRI" className="h-9 text-sm" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{isEn ? "Price (SAR)" : "السعر (ر.س)"}</Label>
+              <Label className="text-xs">{isEn ? "Price (EGP)" : "السعر (ج.م)"}</Label>
               <Input type="number" value={newServicePrice} onChange={e => setNewServicePrice(e.target.value)} placeholder="150" className="h-9 text-sm" />
             </div>
             <div className="flex items-end gap-2">
@@ -191,7 +191,7 @@ export default function LaboratoryPage() {
                     <div>
                       <p className="font-bold text-sm">{srv.name}</p>
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <DollarSign className="w-3 h-3" /> {srv.price} {isEn ? "SAR" : "ر.س"}
+                        <DollarSign className="w-3 h-3" /> {srv.price} {isEn ? "EGP" : "ج.م"}
                       </p>
                     </div>
                   </div>

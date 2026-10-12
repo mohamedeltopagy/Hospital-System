@@ -19,19 +19,19 @@ import { useAppointments, useUpdateAppointment } from "@/hooks/use-appointments"
 import { useServices, useClinics, useDoctors } from "@/hooks/use-clinics";
 import { usePaymentMethods, useInvoices, useAddPaymentMethod, usePayInvoice } from "@/hooks/use-payments";
 
-// Global supported currencies dictionary with exchange rates relative to SAR (1 SAR base)
+// Global supported currencies dictionary with exchange rates relative to SAR (1 EGP base)
 const CURRENCIES: Record<string, { code: string; nameAr: string; nameEn: string; symbol: string; rate: number; flag: string }> = {
-  SAR: { code: "SAR", nameAr: "الريال السعودي", nameEn: "Saudi Riyal", symbol: "ر.س", rate: 1.0, flag: "🇸🇦" },
-  EGP: { code: "EGP", nameAr: "الجنيه المصري", nameEn: "Egyptian Pound", symbol: "ج.م", rate: 13.25, flag: "🇪🇬" },
-  USD: { code: "USD", nameAr: "الدولار الأمريكي", nameEn: "US Dollar", symbol: "$", rate: 0.266, flag: "🇺🇸" },
-  EUR: { code: "EUR", nameAr: "اليورو الأوروبي", nameEn: "Euro", symbol: "€", rate: 0.245, flag: "🇪🇺" },
-  AED: { code: "AED", nameAr: "الدرهم الإماراتي", nameEn: "UAE Dirham", symbol: "د.إ", rate: 0.978, flag: "🇦🇪" },
-  KWD: { code: "KWD", nameAr: "الدينار الكويتي", nameEn: "Kuwaiti Dinar", symbol: "د.ك", rate: 0.082, flag: "🇰🇼" },
+  EGP: { code: "EGP", nameAr: "الجنيه المصري", nameEn: "Egyptian Pound", symbol: "ج.م", rate: 1.0, flag: "🇪🇬" },
+  SAR: { code: "SAR", nameAr: "الريال السعودي", nameEn: "Saudi Riyal", symbol: "ر.س", rate: 0.0754, flag: "🇸🇦" },
+  USD: { code: "USD", nameAr: "الدولار الأمريكي", nameEn: "US Dollar", symbol: "$", rate: 0.02, flag: "🇺🇸" },
+  EUR: { code: "EUR", nameAr: "اليورو الأوروبي", nameEn: "Euro", symbol: "€", rate: 0.0185, flag: "🇪🇺" },
+  AED: { code: "AED", nameAr: "الدرهم الإماراتي", nameEn: "UAE Dirham", symbol: "د.إ", rate: 0.0738, flag: "🇦🇪" },
+  KWD: { code: "KWD", nameAr: "الدينار الكويتي", nameEn: "Kuwaiti Dinar", symbol: "د.ك", rate: 0.0062, flag: "🇰🇼" },
 };
 
-export function formatCurrency(amountInSAR: number, currencyCode: string, isEn: boolean = false) {
-  const curr = CURRENCIES[currencyCode] || CURRENCIES.SAR;
-  const converted = amountInSAR * curr.rate;
+export function formatCurrency(amountInBase: number, currencyCode: string, isEn: boolean = false) {
+  const curr = CURRENCIES[currencyCode] || CURRENCIES.EGP;
+  const converted = amountInBase * curr.rate;
   return `${converted.toFixed(2)} ${isEn ? curr.code : curr.symbol}`;
 }
 
@@ -50,7 +50,7 @@ interface PaymentMethodItem {
 export default function PaymentsPage() {
   const isEn = typeof document !== 'undefined' && document.documentElement.lang === 'en';
   const { data: user } = useUser();
-  const [currency, setCurrency] = useState("SAR");
+  const [currency, setCurrency] = useState("EGP");
 
   if (user?.role === 'admin') {
     return <AdminPaymentsView isEn={isEn} currency={currency} setCurrency={setCurrency} />;
@@ -68,7 +68,7 @@ export default function PaymentsPage() {
    ========================================================= */
 function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isEn: boolean; patientName: string; currency: string; setCurrency: (c: string) => void }) {
   const { toast } = useToast();
-  const currInfo = CURRENCIES[currency] || CURRENCIES.SAR;
+  const currInfo = CURRENCIES[currency] || CURRENCIES.EGP;
 
   const { data: appointments = [] } = useAppointments();
   const { data: services = [] } = useServices();
@@ -221,7 +221,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
 
       setProcessing(false);
       setPayOpen(false);
-      const paidCurrObj = CURRENCIES[checkoutCurrency] || CURRENCIES.SAR;
+      const paidCurrObj = CURRENCIES[checkoutCurrency] || CURRENCIES.EGP;
       const convertedAmt = (dueAmount * paidCurrObj.rate).toFixed(2);
 
       if (checkoutCustomType === "cash_reception") {
@@ -615,9 +615,9 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
                   {formatCurrency(dueAmount, checkoutCurrency, isEn)}
                 </span>
               </div>
-              {checkoutCurrency !== "SAR" && (
+              {checkoutCurrency !== "EGP" && (
                 <p className="text-[11px] text-muted-foreground italic">
-                  {isEn ? `* Converted from base hospital price (${dueAmount}.00 SAR) at rate 1 SAR = ${CURRENCIES[checkoutCurrency].rate} ${checkoutCurrency}` : `* تم التحويل من السعر الأساسي للمستشفى (${dueAmount}.00 ر.س) وفق سعر الصرف التقريبي.`}
+                  {isEn ? `* Converted from base hospital price (${dueAmount}.00 EGP) at rate 1 EGP = ${CURRENCIES[checkoutCurrency].rate} ${checkoutCurrency}` : `* تم التحويل من السعر الأساسي للمستشفى (${dueAmount}.00 ر.س) وفق سعر الصرف التقريبي.`}
                 </p>
               )}
             </div>
@@ -754,7 +754,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
                     <div className="font-black text-lg text-primary">
                       {formatCurrency(selectedTx.amount, selectedTx.paidCurrency || currency, isEn)}
                     </div>
-                    {selectedTx.paidCurrency && selectedTx.paidCurrency !== "SAR" && (
+                    {selectedTx.paidCurrency && selectedTx.paidCurrency !== "EGP" && (
                       <div className="text-[11px] text-muted-foreground">({selectedTx.amount.toFixed(2)} ر.س)</div>
                     )}
                   </div>
@@ -798,7 +798,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
    ========================================================= */
 function DoctorPaymentsView({ isEn, doctorName, currency, setCurrency }: { isEn: boolean; doctorName: string; currency: string; setCurrency: (c: string) => void }) {
   const { toast } = useToast();
-  const currInfo = CURRENCIES[currency] || CURRENCIES.SAR;
+  const currInfo = CURRENCIES[currency] || CURRENCIES.EGP;
 
   const { data: appointments = [] } = useAppointments();
   const { data: services = [] } = useServices();
@@ -981,7 +981,7 @@ function DoctorPaymentsView({ isEn, doctorName, currency, setCurrency }: { isEn:
 function AdminPaymentsView({ isEn, currency, setCurrency }: { isEn: boolean; currency: string; setCurrency: (c: string) => void }) {
   const { toast } = useToast();
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
-  const currInfo = CURRENCIES[currency] || CURRENCIES.SAR;
+  const currInfo = CURRENCIES[currency] || CURRENCIES.EGP;
 
   const { data: appointments = [] } = useAppointments();
   const { data: services = [] } = useServices();

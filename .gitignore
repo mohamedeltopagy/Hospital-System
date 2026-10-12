@@ -5,3 +5,8 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
+ReadOnlyProject/
+*.zip
+web_reception/
+*.py
+patients_data.json

@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import type {
   User, InsertUser,
   Clinic, InsertClinic,
@@ -113,6 +115,40 @@ export class MemoryStorage implements IStorage {
     { id: 9, clinicId: null, category: "pharmacy", name: "Augmentin 1g", price: 85, description: "مضاد حيوي واسع المجال" }
   ];
   private nextId = { user: 1, clinic: 1, appointment: 1, history: 1, report: 1, plan: 1, prescription: 1, labRequest: 1, service: 10, paymentMethod: 1, invoice: 1, transaction: 1 };
+
+  constructor() {
+    const dbPath = path.resolve(process.cwd(), "database.json");
+    if (fs.existsSync(dbPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+        
+        // Ensure dates are parsed correctly from strings
+        if (data.reports) data.reports.forEach((r: any) => r.date = new Date(r.date));
+        if (data.prescriptions) data.prescriptions.forEach((p: any) => p.date = new Date(p.date));
+        if (data.labRequests) data.labRequests.forEach((l: any) => l.date = new Date(l.date));
+        if (data.invoices) data.invoices.forEach((i: any) => i.date = new Date(i.date));
+        if (data.transactions) data.transactions.forEach((t: any) => t.date = new Date(t.date));
+        if (data.appointments) data.appointments.forEach((a: any) => { if(a.datetime) a.datetime = new Date(a.datetime) });
+
+        Object.assign(this, data);
+      } catch (e) {
+        console.error("Failed to load database.json", e);
+      }
+    }
+    
+    let lastSaved = JSON.stringify(this);
+    setInterval(() => {
+      const current = JSON.stringify(this);
+      if (current !== lastSaved) {
+        try {
+          fs.writeFileSync(dbPath, current, "utf-8");
+          lastSaved = current;
+        } catch(e) {
+          console.error("Failed to save database.json", e);
+        }
+      }
+    }, 2000); // Check every 2 seconds
+  }
 
   async cleanDatabase(): Promise<void> {
     this.appointments = [];
@@ -360,7 +396,7 @@ export class MemoryStorage implements IStorage {
   async getInvoices(patientId: number) { return this.invoices.filter(i => i.patientId === patientId); }
   async getInvoice(id: number) { return this.invoices.find(i => i.id === id); }
   async createInvoice(data: InsertInvoice): Promise<Invoice> {
-    const invoice: Invoice = { id: this.nextId.invoice++, status: "pending", currency: "SAR", date: new Date(), ...data };
+    const invoice: Invoice = { id: this.nextId.invoice++, status: "pending", currency: "EGP", date: new Date(), ...data };
     this.invoices.push(invoice);
     return invoice;
   }

@@ -281,7 +281,7 @@ export default function TreatmentPlansPage() {
                     <SelectContent>
                       {pharmacyServices?.map((srv) => (
                         <SelectItem key={srv.id} value={srv.id.toString()} className="font-semibold">
-                          {srv.name} <span className="text-muted-foreground text-xs mx-2">({srv.price} ر.س)</span>
+                          {srv.name} <span className="text-muted-foreground text-xs mx-2">({srv.price} ج.م)</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -359,7 +359,7 @@ export default function TreatmentPlansPage() {
                     <SelectContent>
                       {labServices?.map((srv) => (
                         <SelectItem key={srv.id} value={srv.id.toString()} className="font-semibold">
-                          {srv.name} <span className="text-muted-foreground text-xs mx-2">({srv.price} ر.س)</span>
+                          {srv.name} <span className="text-muted-foreground text-xs mx-2">({srv.price} ج.م)</span>
                         </SelectItem>
                       ))}
                     </SelectContent>

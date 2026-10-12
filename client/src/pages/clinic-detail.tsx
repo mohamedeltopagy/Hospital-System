@@ -80,7 +80,7 @@ export default function ClinicDetailPage() {
       });
       toast({
         title: isEn ? "Service Added!" : "تم إضافة الخدمة للعيادة بنجاح!",
-        description: isEn ? `Added "${newServiceName}" (${newServicePrice} SAR)` : `تم اعتماد خدمة "${newServiceName}" بسعر (${newServicePrice} ر.س) في قائمة أسعار العيادة.`,
+        description: isEn ? `Added "${newServiceName}" (${newServicePrice} EGP)` : `تم اعتماد خدمة "${newServiceName}" بسعر (${newServicePrice} ج.م) في قائمة أسعار العيادة.`,
       });
       setServiceOpen(false);
       setNewServiceName("");
@@ -499,7 +499,7 @@ export default function ClinicDetailPage() {
                 <CardContent className="p-5 pt-2 mt-auto flex items-center justify-between border-t border-border/50 bg-secondary/20">
                   <span className="text-xs font-semibold text-muted-foreground">{isEn ? "Official Price:" : "السعر المعتمد:"}</span>
                   <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                    {srv.price} {isEn ? "SAR" : "ر.س"}
+                    {srv.price} {isEn ? "EGP" : "ج.م"}
                   </span>
                 </CardContent>
               </Card>
@@ -636,7 +636,7 @@ export default function ClinicDetailPage() {
               {isEn ? `Add Service to ${clinic?.name}` : `إضافة خدمة جديدة لعيادة (${clinic?.name})`}
             </DialogTitle>
             <DialogDescription>
-              {isEn ? "Define the medical service/consultation name and assign an official price in Saudi Riyals (SAR)." : "حدد اسم الكشف أو الخدمة الطبية مع السعر المعتمد بالريال السعودي ليعرف المرضى تسعيرة العيادة."}
+              {isEn ? "Define the medical service/consultation name and assign an official price in Egyptian Pounds (EGP)." : "حدد اسم الكشف أو الخدمة الطبية مع السعر المعتمد بالريال السعودي ليعرف المرضى تسعيرة العيادة."}
             </DialogDescription>
           </DialogHeader>
 
@@ -654,7 +654,7 @@ export default function ClinicDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">{isEn ? "Approved Price (in SAR)" : "السعر المعتمد (بالريال السعودي)"}</Label>
+              <Label className="text-sm font-semibold">{isEn ? "Approved Price (in EGP)" : "السعر المعتمد (بالريال السعودي)"}</Label>
               <Input 
                 type="number" 
                 min="0"

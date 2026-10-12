@@ -6,6 +6,7 @@ import { z } from "zod";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import { getMedicalResponse, type ChatMessage } from "./ai";
+import { PSOOptimizer } from "./psoOptimizer";
 
 const SessionStore = MemoryStore(session);
 
@@ -611,7 +612,7 @@ export async function registerRoutes(
             patientId: Number(patientId),
             appointmentId: null as any,
             amount: service.price,
-            currency: 'SAR',
+            currency: 'EGP',
             status: 'pending',
             description: `صرف دواء: ${service.name}`
           } as any);
@@ -716,7 +717,7 @@ export async function registerRoutes(
             patientId: Number(patientId),
             appointmentId: null as any,
             amount: service.price,
-            currency: 'SAR',
+            currency: 'EGP',
             status: 'pending',
             description: `فحص معملي/أشعة: ${service.name}`
           } as any);
@@ -1004,6 +1005,31 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Chat error:", err);
       res.status(500).json({ message: "AI service error" });
+    }
+  });
+
+  // PSO Schedule Optimization Route
+  app.post("/api/optimize-schedule", async (req, res) => {
+    try {
+      const { patients } = req.body; // Array of patients with {id, name, expectedDuration}
+      if (!patients || !Array.isArray(patients)) {
+        return res.status(400).json({ message: "Invalid input. Expected array of patients." });
+      }
+      
+      const doctorsDb = await storage.getDoctors();
+      const doctors = doctorsDb.map(d => ({ id: d.id, name: d.name }));
+      
+      if (doctors.length === 0) {
+        return res.status(400).json({ message: "No doctors available for optimization." });
+      }
+
+      const optimizer = new PSOOptimizer(patients, doctors);
+      const result = optimizer.optimize();
+      
+      res.json({ message: "Schedule optimized using Particle Swarm Optimization (PSO)", result });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error during schedule optimization" });
     }
   });
 

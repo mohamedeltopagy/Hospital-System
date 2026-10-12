@@ -62,4 +62,45 @@
 ## 🛠️ التقنيات المستخدمة (Tech Stack)
 - **Frontend:** React 18, TypeScript, Tailwind CSS, shadcn/ui, Wouter (Routing), Lucide Icons, TanStack Query.
 - **Backend:** Node.js, Express.js, TypeScript, Memory Storage/API Routes, Dynamic Validation Engine.
-- **AI & Integrations:** Google Gemini AI API integration for Medical Chatbot.
+- **AI & Optimization:** Google Gemini AI API (Intelligent Medical Agent), Particle Swarm Optimization (PSO Load Balancing).
+- **Security:** PII Masking, Prompt Injection Sandwich Defense, Data Loss Prevention (DLP).
+
+---
+
+## 🚀 طريقة التثبيت والتشغيل (How to Run)
+
+### 1. استنساخ المستودع (Clone Repository)
+```bash
+git clone https://github.com/mohamedeltopagy/Hospital-System.git
+cd Hospital-System
+```
+
+### 2. تثبيت الحزم (Install Dependencies)
+```bash
+npm install
+```
+
+### 3. إعداد المتغيرات البيئية (Environment Variables)
+قم بنسخ ملف `.env.example` إلى `.env` وضع مفتاح الـ Gemini الخاص بك:
+```bash
+cp .env.example .env
+```
+
+### 4. تشغيل المشروع (Run Development Server)
+```bash
+npm run dev
+```
+
+### 5. فتح المشروع في المتصفح
+توجه إلى الرابط: [http://localhost:5000](http://localhost:5000)
+
+---
+
+## 🔐 الحسابات الافتراضية للتجربة (Demo Accounts)
+
+| الدور (Role) | اسم المستخدم (Username) | كلمة المرور (Password) |
+|---|---|---|
+| **المسؤول الرئيسي (Admin)** | `admin1` | `123` |
+| **استشاري (Doctor)** | `محمد الطبجي` | `123456` |
+| **مريض (Patient)** | `mohammeed` | `m4m10945` |
+
