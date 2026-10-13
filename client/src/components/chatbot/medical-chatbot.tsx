@@ -14,6 +14,7 @@ type Message = {
   role: "user" | "bot";
   text: string;
   isEmergency?: boolean;
+  whatsappUrl?: string | null;
 };
 
 type ChatHistory = {
@@ -119,12 +120,14 @@ export function MedicalChatbot() {
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
       const reply: string = data.reply || "";
+      const whatsappUrl: string | null = data.whatsappUrl || null;
 
       const botMsg: Message = {
         id: Date.now().toString(),
         role: "bot",
         text: reply,
         isEmergency: isEmergencyMessage(reply),
+        whatsappUrl: whatsappUrl,
       };
 
       if (!isGreeting) {
@@ -308,7 +311,24 @@ export function MedicalChatbot() {
                       {isEn ? "⚠️ URGENT" : "⚠️ عاجل"}
                     </p>
                   )}
-                  <p>{msg.text}</p>
+                  <p className="whitespace-pre-line">{msg.text}</p>
+                  {msg.whatsappUrl && (
+                    <div className="mt-3 pt-2.5 border-t border-border/50 flex flex-col gap-2">
+                      <div className="flex items-center gap-2 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+                        <span className="text-base">🚀</span>
+                        <span>{isEn ? "Automated WhatsApp Confirmation Sent by System ✅" : "قام النظام بإرسال رسالة التأكيد تلقائياً عبر واتساب للمريض ✅"}</span>
+                      </div>
+                      <a
+                        href={msg.whatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 active:scale-95"
+                      >
+                        <span className="text-sm">📲</span>
+                        {isEn ? "Open in WhatsApp App / Web" : "فتح محادثة واتساب المباشرة"}
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>

@@ -14,6 +14,7 @@ export const users = pgTable("users", {
   workingHours: text("working_hours"), // e.g. "09:00 - 16:00"
   gender: text("gender"), // "male" | "female"
   dateOfBirth: text("date_of_birth"), // "YYYY-MM-DD"
+  phone: text("phone"), // Patient/Doctor WhatsApp phone number e.g. "+201012345678"
 });
 
 export const clinics = pgTable("clinics", {
@@ -126,6 +127,27 @@ export const transactions = pgTable("transactions", {
   date: timestamp("date").defaultNow(),
 });
 
+export const doctorReviews = pgTable("doctor_reviews", {
+  id: serial("id").primaryKey(),
+  doctorId: integer("doctor_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  patientName: text("patient_name").notNull(),
+  rating: integer("rating").notNull(), // 1 to 5 stars
+  comment: text("comment"),
+  date: timestamp("date").defaultNow(),
+});
+
+export const whatsappLogs = pgTable("whatsapp_logs", {
+  id: serial("id").primaryKey(),
+  patientId: integer("patient_id"),
+  patientName: text("patient_name").notNull(),
+  recipientPhone: text("recipient_phone").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("delivered"), // 'delivered', 'sent', 'failed'
+  provider: text("provider").notNull().default("system_gateway"), // 'ultramsg', 'twilio', 'meta', 'system_gateway'
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertClinicSchema = createInsertSchema(clinics).omit({ id: true, doctorCount: true });
 export const insertAppointmentSchema = createInsertSchema(appointments).omit({ id: true, status: true });
@@ -138,6 +160,8 @@ export const insertServiceSchema = createInsertSchema(services).omit({ id: true 
 export const insertPaymentMethodSchema = createInsertSchema(paymentMethods).omit({ id: true });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, date: true, status: true, currency: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, date: true, status: true });
+export const insertDoctorReviewSchema = createInsertSchema(doctorReviews).omit({ id: true, date: true });
+export const insertWhatsappLogSchema = createInsertSchema(whatsappLogs).omit({ id: true, sentAt: true });
 
 // Explicit API Contract Types
 export type User = typeof users.$inferSelect;
@@ -175,6 +199,12 @@ export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+
+export type DoctorReview = typeof doctorReviews.$inferSelect;
+export type InsertDoctorReview = z.infer<typeof insertDoctorReviewSchema>;
+
+export type WhatsappLog = typeof whatsappLogs.$inferSelect;
+export type InsertWhatsappLog = z.infer<typeof insertWhatsappLogSchema>;
 
 export const loginSchema = z.object({
   username: z.string(),

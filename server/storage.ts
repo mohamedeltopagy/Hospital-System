@@ -12,7 +12,9 @@ import type {
   PaymentMethod, InsertPaymentMethod,
   Invoice, InsertInvoice,
   Transaction, InsertTransaction,
-  LabRequest, InsertLabRequest
+  LabRequest, InsertLabRequest,
+  DoctorReview, InsertDoctorReview,
+  WhatsappLog, InsertWhatsappLog
 } from "@shared/schema";
 
 export interface IStorage {
@@ -23,6 +25,13 @@ export interface IStorage {
   deleteUser(id: number): Promise<boolean>;
   getDoctors(): Promise<User[]>;
   getDoctorsByClinic(clinicId: number): Promise<User[]>;
+
+  getDoctorReviews(doctorId: number): Promise<DoctorReview[]>;
+  createDoctorReview(review: InsertDoctorReview): Promise<DoctorReview>;
+
+  getWhatsappLogs(): Promise<WhatsappLog[]>;
+  getWhatsappLogsByPatient(patientId: number): Promise<WhatsappLog[]>;
+  createWhatsappLog(log: InsertWhatsappLog): Promise<WhatsappLog>;
 
   getClinics(): Promise<Clinic[]>;
   getClinic(id: number): Promise<Clinic | undefined>;
@@ -101,6 +110,12 @@ export class MemoryStorage implements IStorage {
   private paymentMethods: PaymentMethod[] = [];
   private invoices: Invoice[] = [];
   private transactions: Transaction[] = [];
+  private doctorReviews: DoctorReview[] = [
+    { id: 1, doctorId: 2, patientId: 3, patientName: "أحمد إبراهيم", rating: 5, comment: "طبيب ممتاز ومستمع رائع وشرح الحالة بكل تفصيل ودقة.", date: new Date() },
+    { id: 2, doctorId: 2, patientId: 4, patientName: "سارة محمد", rating: 5, comment: "تشخيص متميز جداً، والعلاج ساعدني كثيراً من أول يوم.", date: new Date() },
+    { id: 3, doctorId: 2, patientId: 5, patientName: "محمود علي", rating: 4, comment: "تعامل راقي جداً واهتمام كبير من الطبيب وطاقم التمريض.", date: new Date() }
+  ];
+  private whatsappLogs: WhatsappLog[] = [];
   private services: Service[] = [
     { id: 1, clinicId: 1, category: "clinic", name: "كشف استشارة عيادة الباطنة العامة", price: 200, description: "كشف شامل وتشخيص مبدئي للمريض مع قياس العلامات الحيوية" },
     { id: 2, clinicId: 1, category: "clinic", name: "فحص السكر التراكمي العاجل (HbA1c)", price: 150, description: "تحليل معملي فوري داخل العيادة للسكري" },
@@ -114,7 +129,7 @@ export class MemoryStorage implements IStorage {
     { id: 8, clinicId: null, category: "pharmacy", name: "Panadol Advance 500mg", price: 15, description: "مسكن للآلام وخافض للحرارة" },
     { id: 9, clinicId: null, category: "pharmacy", name: "Augmentin 1g", price: 85, description: "مضاد حيوي واسع المجال" }
   ];
-  private nextId = { user: 1, clinic: 1, appointment: 1, history: 1, report: 1, plan: 1, prescription: 1, labRequest: 1, service: 10, paymentMethod: 1, invoice: 1, transaction: 1 };
+  private nextId = { user: 1, clinic: 1, appointment: 1, history: 1, report: 1, plan: 1, prescription: 1, labRequest: 1, service: 10, paymentMethod: 1, invoice: 1, transaction: 1, doctorReview: 4, whatsappLog: 1 };
 
   constructor() {
     const dbPath = path.resolve(process.cwd(), "database.json");
@@ -129,6 +144,8 @@ export class MemoryStorage implements IStorage {
         if (data.invoices) data.invoices.forEach((i: any) => i.date = new Date(i.date));
         if (data.transactions) data.transactions.forEach((t: any) => t.date = new Date(t.date));
         if (data.appointments) data.appointments.forEach((a: any) => { if(a.datetime) a.datetime = new Date(a.datetime) });
+        if (data.doctorReviews) data.doctorReviews.forEach((dr: any) => dr.date = new Date(dr.date));
+        if (data.whatsappLogs) data.whatsappLogs.forEach((w: any) => w.sentAt = new Date(w.sentAt));
 
         Object.assign(this, data);
       } catch (e) {
@@ -202,8 +219,22 @@ export class MemoryStorage implements IStorage {
     this.users = this.users.filter(u => u.id !== id);
     return this.users.length < initialLen;
   }
-  async getDoctors() { return this.users.filter(u => u.role === 'doctor'); }
-  async getDoctorsByClinic(clinicId: number) { return this.users.filter(u => u.role === 'doctor' && u.clinicId === clinicId); }
+  async getDoctors() { 
+    return this.users.filter(u => u.role === 'doctor').map(doc => {
+      const docReviews = this.doctorReviews.filter(r => r.doctorId === doc.id);
+      const avg = docReviews.length > 0 
+        ? Number((docReviews.reduce((sum, r) => sum + r.rating, 0) / docReviews.length).toFixed(1))
+        : 5.0;
+      return {
+        ...doc,
+        averageRating: avg,
+        reviewsCount: docReviews.length
+      };
+    }); 
+  }
+  async getDoctorsByClinic(clinicId: number) { 
+    return (await this.getDoctors()).filter(u => u.clinicId === clinicId); 
+  }
 
   async getClinics() { 
     return this.clinics.map(c => ({
@@ -412,6 +443,65 @@ export class MemoryStorage implements IStorage {
     const transaction: Transaction = { id: this.nextId.transaction++, status: "success", date: new Date(), ...data };
     this.transactions.push(transaction);
     return transaction;
+  }
+
+  async getDoctorReviews(doctorId: number) { 
+    return this.doctorReviews.filter(r => r.doctorId === doctorId); 
+  }
+  async createDoctorReview(data: InsertDoctorReview): Promise<DoctorReview> {
+    const review: DoctorReview = { 
+      id: this.nextId.doctorReview++, 
+      date: new Date(), 
+      patientId: data.patientId,
+      doctorId: data.doctorId,
+      patientName: data.patientName,
+      rating: data.rating,
+      comment: data.comment ?? null
+    };
+    this.doctorReviews.push(review);
+    return review;
+  }
+
+  async getWhatsappLogs(): Promise<WhatsappLog[]> {
+    return [...(this.whatsappLogs || [])].reverse();
+  }
+
+  async getWhatsappLogsByPatient(patientId: number): Promise<WhatsappLog[]> {
+    return (this.whatsappLogs || []).filter(w => w.patientId === patientId).reverse();
+  }
+
+  async createWhatsappLog(data: InsertWhatsappLog): Promise<WhatsappLog> {
+    if (!this.whatsappLogs) this.whatsappLogs = [];
+    if (!this.nextId.whatsappLog) this.nextId.whatsappLog = 1;
+    const log: WhatsappLog = {
+      id: this.nextId.whatsappLog++,
+      patientId: data.patientId ?? null,
+      patientName: data.patientName,
+      recipientPhone: data.recipientPhone,
+      message: data.message,
+      status: data.status || "delivered",
+      provider: data.provider || "system_gateway",
+      sentAt: new Date(),
+    };
+    this.whatsappLogs.push(log);
+    return log;
+  }
+
+  private whatsappConfig: any = {
+    provider: "ultramsg",
+    ultraMsgInstance: "instance194177",
+    ultraMsgToken: "wkfef29dz2x4glh4",
+    metaToken: "",
+    metaPhoneId: "",
+  };
+
+  async getWhatsappConfig() {
+    return this.whatsappConfig;
+  }
+
+  async setWhatsappConfig(config: any) {
+    this.whatsappConfig = { ...this.whatsappConfig, ...config };
+    return this.whatsappConfig;
   }
 }
 

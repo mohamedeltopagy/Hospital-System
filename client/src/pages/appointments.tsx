@@ -57,6 +57,7 @@ export default function AppointmentsPage() {
   const [editDate, setEditDate] = useState<Date>(new Date());
   const [editTime, setEditTime] = useState<string>("10:00");
   const [isUpdating, setUpdating] = useState(false);
+  const [bookedWhatsAppUrl, setBookedWhatsAppUrl] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -89,20 +90,27 @@ export default function AppointmentsPage() {
     return arabicName;
   };
 
-  const onSubmit = (data: any) => {
+  const onSubmit = async (data: any) => {
     if (!user) return;
     
     const [hours, minutes] = data.time.split(':');
     const datetime = new Date(data.date);
     datetime.setHours(parseInt(hours), parseInt(minutes));
 
-    createMutation.mutate({
-      patientId: user.id,
-      doctorId: data.doctorId,
-      clinicId: data.clinicId,
-      datetime,
-      notes: isEn ? "Booked via platform" : "حجز عبر المنصة",
-    });
+    try {
+      const res = await createMutation.mutateAsync({
+        patientId: user.id,
+        doctorId: data.doctorId,
+        clinicId: data.clinicId,
+        datetime,
+        notes: isEn ? "Booked via platform" : "حجز عبر المنصة",
+      });
+      if ((res as any)?.whatsappUrl) {
+        setBookedWhatsAppUrl((res as any).whatsappUrl);
+      }
+    } catch (e) {
+      // Handled in mutation onError
+    }
   };
 
   const handleUpdateStatus = async (id: number, newStatus: string) => {
@@ -442,6 +450,27 @@ export default function AppointmentsPage() {
                             </>
                           )}
 
+                          {/* WhatsApp Reminder Button */}
+                          {appt.status !== 'cancelled' && (
+                            <Button
+                              asChild
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl border-2 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1.5 font-bold"
+                            >
+                              <a
+                                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                                  `🏥 تذكير بموعد مستشفى الأمل:\n👤 المريض: ${user?.name || "المريض"}\n👨‍⚕️ الطبيب: ${apptDoctor?.name || "طبيب المستشفى"}\n🏢 العيادة: ${apptClinic?.name || "العيادة"}\n📅 الموعد: ${format(new Date(appt.datetime), 'yyyy-MM-dd HH:mm')}\nالحالة: ${appt.status === 'confirmed' ? 'مؤكد ✅' : 'قيد الانتظار ⏳'}`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <span>📲</span>
+                                {isEn ? "WhatsApp Reminder" : "تذكير عبر واتساب"}
+                              </a>
+                            </Button>
+                          )}
+
                           {/* Doctor / Admin Actions */}
                           {(user?.role === 'doctor' || user?.role === 'admin') && (
                             <>
@@ -542,6 +571,41 @@ export default function AppointmentsPage() {
               {isUpdating ? (isEn ? "Saving..." : "جاري الحفظ...") : (isEn ? "Save New Date" : "حفظ الموعد الجديد")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WhatsApp Success Modal */}
+      <Dialog open={!!bookedWhatsAppUrl} onOpenChange={(open) => !open && setBookedWhatsAppUrl(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-6 text-center" dir={isEn ? "ltr" : "rtl"}>
+          <div className="w-16 h-16 bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2 text-3xl">
+            📲
+          </div>
+          <DialogTitle className="text-xl font-bold text-foreground">
+            {isEn ? "Appointment Booked Successfully!" : "تم تأكيد الحجز وإرسال تفاصيل الموعد! ✅"}
+          </DialogTitle>
+          <DialogDescription className="text-sm leading-relaxed text-muted-foreground pt-1">
+            {isEn 
+              ? "The system automatically dispatched an official WhatsApp confirmation to your registered phone number."
+              : `قام النظام بإرسال رسالة تأكيد رسمية وتفاصيل الموعد تلقائياً في الخلفية عبر واتساب إلى هاتفك (${(user as any)?.phone || 'المسجل'}).`}
+          </DialogDescription>
+          <div className="pt-4 flex flex-col gap-2">
+            <Button 
+              asChild 
+              className="w-full rounded-xl py-6 font-bold text-base bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 gap-2"
+            >
+              <a href={bookedWhatsAppUrl || '#'} target="_blank" rel="noopener noreferrer">
+                <span>📲</span>
+                {isEn ? "Open in WhatsApp Now" : "فتح الرسالة في تطبيق واتساب الآن"}
+              </a>
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => setBookedWhatsAppUrl(null)}
+              className="w-full rounded-xl py-5 font-semibold"
+            >
+              {isEn ? "Close" : "إغلاق"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

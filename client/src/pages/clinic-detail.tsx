@@ -16,7 +16,7 @@ import { api } from "@shared/routes";
 import { 
   Stethoscope, HeartPulse, Brain, Eye, Baby, Activity, 
   Users, ArrowRight, ArrowLeft, Calendar, UserCheck, ShieldPlus,
-  Plus, Trash2, ArrowRightLeft, UserPlus, AlertCircle, DollarSign, Tag, Edit3
+  Plus, Trash2, ArrowRightLeft, UserPlus, AlertCircle, DollarSign, Tag, Edit3, Star
 } from "lucide-react";
 
 const getClinicStyle = (name: string = "") => {
@@ -64,6 +64,43 @@ export default function ClinicDetailPage() {
   const [newServiceDesc, setNewServiceDesc] = useState("");
 
   const isAdminOrManager = user?.role === 'admin';
+
+  // 5-Star Doctor Rating State
+  const [ratingDoc, setRatingDoc] = useState<any | null>(null);
+  const [selectedRating, setSelectedRating] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState("");
+  const [isRatingSubmitting, setRatingSubmitting] = useState(false);
+
+  const handleSubmitRating = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ratingDoc) return;
+    setRatingSubmitting(true);
+    try {
+      const res = await fetch(`/api/doctors/${ratingDoc.id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ rating: selectedRating, comment: ratingComment })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Failed to submit rating");
+      }
+      toast({
+        title: isEn ? "Thank you!" : "تم تسجيل تقييمك بنجاح! ⭐",
+        description: isEn 
+          ? `Your ${selectedRating}-star rating for ${ratingDoc.name} has been saved.` 
+          : `تم حفظ تقييمك (${selectedRating} نجوم) للطبيب بنجاح واحتسابه في متوسط التقييمات.`
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/doctors"] });
+      setRatingDoc(null);
+      setRatingComment("");
+    } catch (err: any) {
+      toast({ title: isEn ? "Error" : "خطأ", description: err.message, variant: "destructive" });
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
 
   const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,6 +377,23 @@ export default function ClinicDetailPage() {
                         <ShieldPlus className="w-4 h-4" />
                         {isEn ? "Senior Specialist" : "استشاري متخصص"}
                       </p>
+                      {/* Doctor 5-Star Rating Display */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <div className="flex items-center text-amber-500">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star 
+                              key={i} 
+                              className={`w-3.5 h-3.5 ${i < Math.round((doc as any).averageRating || 5) ? 'fill-amber-500 text-amber-500' : 'text-muted-foreground/30'}`} 
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs font-black text-foreground">
+                          {((doc as any).averageRating || 5.0).toFixed(1)}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground font-medium">
+                          ({(doc as any).reviewsCount || 0} {isEn ? "reviews" : "تقييم"})
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -398,12 +452,23 @@ export default function ClinicDetailPage() {
                     );
                   })()}
                   {user?.role === 'patient' && (
-                    <Button asChild variant="default" className="w-full rounded-xl py-5 font-bold shadow-sm">
-                      <Link href={`/appointments?clinicId=${clinicId}&doctorId=${doc.id}`}>
-                        <Calendar className="w-4 h-4 me-2" />
-                        {isEn ? "Book with Doctor" : "حجز موعد مع الطبيب"}
-                      </Link>
-                    </Button>
+                    <>
+                      <Button asChild variant="default" className="w-full rounded-xl py-5 font-bold shadow-sm">
+                        <Link href={`/appointments?clinicId=${clinicId}&doctorId=${doc.id}`}>
+                          <Calendar className="w-4 h-4 me-2" />
+                          {isEn ? "Book with Doctor" : "حجز موعد مع الطبيب"}
+                        </Link>
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => { setRatingDoc(doc); setSelectedRating(5); setRatingComment(""); }}
+                        className="w-full rounded-xl text-xs font-bold border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 gap-1.5 h-10"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                        {isEn ? "Rate Doctor (5 Stars)" : "⭐ تقييم الطبيب (5 نجوم)"}
+                      </Button>
+                    </>
                   )}
                   {isAdminOrManager && (
                     <div className="flex gap-2 pt-1">
@@ -684,6 +749,97 @@ export default function ClinicDetailPage() {
               <Button type="submit" disabled={createServiceMutation.isPending} className="rounded-xl px-6 h-11 font-bold shadow-md gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <Plus className="w-4 h-4" />
                 {createServiceMutation.isPending ? (isEn ? "Saving..." : "جاري الحفظ...") : (isEn ? "Save Service & Price" : "حفظ الخدمة والتسعيرة")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG 4: Rate Doctor (5-Star Rating System) */}
+      <Dialog open={!!ratingDoc} onOpenChange={(open) => !open && setRatingDoc(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-6" dir={isEn ? "ltr" : "rtl"}>
+          <DialogHeader className="space-y-2 text-center">
+            <DialogTitle className="text-xl font-bold flex items-center justify-center gap-2 text-amber-500">
+              <Star className="w-6 h-6 fill-amber-500 text-amber-500" />
+              {isEn ? "Rate Doctor" : "تقييم الطبيب وتجربة الكشف"}
+            </DialogTitle>
+            <DialogDescription className="text-sm">
+              {isEn
+                ? `Share your experience and feedback for Dr. ${ratingDoc?.name}`
+                : `شاركنا تقييمك ورأيك في الخدمة الطبية المقدمة من ${ratingDoc?.name}`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitRating} className="space-y-5 py-3">
+            {/* 5-Star Interactive Rating Selector */}
+            <div className="flex flex-col items-center justify-center gap-2 p-4 bg-amber-500/5 rounded-2xl border border-amber-500/20">
+              <span className="text-sm font-semibold text-muted-foreground">
+                {isEn ? "Choose rating (out of 5):" : "اختر التقييم (من 5 نجوم):"}
+              </span>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setSelectedRating(star)}
+                    className="p-1.5 transition-transform hover:scale-125 focus:outline-none"
+                    title={`${star} ${isEn ? "Stars" : "نجوم"}`}
+                  >
+                    <Star
+                      className={`w-8 h-8 transition-colors ${
+                        star <= selectedRating
+                          ? "fill-amber-400 text-amber-500"
+                          : "text-muted-foreground/30 hover:text-amber-300"
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                {selectedRating === 5 && (isEn ? "⭐⭐⭐⭐⭐ Excellent (5/5)" : "⭐⭐⭐⭐⭐ ممتاز جداً (5 من 5)")}
+                {selectedRating === 4 && (isEn ? "⭐⭐⭐⭐ Very Good (4/5)" : "⭐⭐⭐⭐ جيد جداً (4 من 5)")}
+                {selectedRating === 3 && (isEn ? "⭐⭐⭐ Good (3/5)" : "⭐⭐⭐ جيد (3 من 5)")}
+                {selectedRating === 2 && (isEn ? "⭐⭐ Fair (2/5)" : "⭐⭐ مقبول (2 من 5)")}
+                {selectedRating === 1 && (isEn ? "⭐ Poor (1/5)" : "⭐ ضعيف (1 من 5)")}
+              </span>
+            </div>
+
+            {/* Comment / Review Feedback */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">
+                {isEn ? "Your Review / Feedback (Optional)" : "ملاحظاتك أو تعليقك على الكشف (اختياري)"}
+              </Label>
+              <Textarea
+                placeholder={
+                  isEn
+                    ? "Write your comments regarding the consultation, doctor's punctuality, care, etc..."
+                    : "اكتب تجربتك مع الطبيب، دقة المواعيد، التعامل، والتشخيص..."
+                }
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+                className="rounded-xl border-2 min-h-[90px]"
+              />
+            </div>
+
+            <DialogFooter className="pt-2 flex sm:justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRatingDoc(null)}
+                disabled={isRatingSubmitting}
+                className="rounded-xl px-5 h-11"
+              >
+                {isEn ? "Cancel" : "إلغاء"}
+              </Button>
+              <Button
+                type="submit"
+                disabled={isRatingSubmitting}
+                className="rounded-xl px-6 h-11 font-bold shadow-md gap-2 bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                <Star className="w-4 h-4 fill-white" />
+                {isRatingSubmitting
+                  ? (isEn ? "Submitting..." : "جاري الحفظ...")
+                  : (isEn ? "Submit Rating" : "إرسال التقييم")}
               </Button>
             </DialogFooter>
           </form>

@@ -137,7 +137,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
 
   const handleOpenPay = () => {
     setCheckoutCurrency(currency);
-    const primaryMethod = methods.find(m => m.primary) || methods[0];
+    const primaryMethod = methods.find((m: any) => m.primary) || methods[0];
     if (primaryMethod) {
       setCheckoutMethodId(primaryMethod.id);
       setCheckoutCustomType(null);
@@ -176,7 +176,6 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
   };
 
   const handleSetPrimary = (id: string) => {
-    setMethods(methods.map(m => ({ ...m, primary: m.id === id })));
     toast({ title: isEn ? "Primary Method Updated" : "تم التحديث", description: isEn ? "Default payment method changed successfully." : "تم تغيير طريقة الدفع الأساسية بنجاح." });
   };
 
@@ -185,7 +184,6 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
       toast({ title: isEn ? "Warning" : "تنبيه", description: isEn ? "You must keep at least one registered method." : "يجب الاحتفاظ بطريقة دفع واحدة على الأقل.", variant: "destructive" });
       return;
     }
-    setMethods(methods.filter(m => m.id !== id));
     toast({ title: isEn ? "Deleted" : "تم الحذف", description: isEn ? "Payment method removed successfully." : "تم حذف طريقة الدفع من حسابك." });
   };
 
@@ -199,7 +197,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
       else if (checkoutCustomType === "stc_pay") chosenLabel = isEn ? "STC Pay Wallet" : "محفظة STC Pay الإلكترونية";
       else if (checkoutCustomType === "cash_reception") chosenLabel = isEn ? "Cash at Reception" : "الدفع نقداً عند مكتب الاستقبال";
     } else {
-      const found = methods.find(m => m.id === checkoutMethodId);
+      const found = methods.find((m: any) => m.id === checkoutMethodId);
       if (found) {
         chosenLabel = `${found.type} ${found.last4 ? `(**** ${found.last4})` : `(${found.provider})`}`;
       } else {
@@ -292,7 +290,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {methods.map((method) => (
+              {methods.map((method: any) => (
                 <Card key={method.id} className={`rounded-[1.5rem] border-2 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md ${method.primary ? "border-primary/40 bg-primary/[0.03]" : "border-border"}`}>
                   {method.primary && (
                     <div className={`absolute top-0 ${isEn ? "right-0 rounded-bl-xl" : "left-0 rounded-br-xl"} bg-primary text-white text-[10px] px-3 py-1 font-bold flex items-center gap-1`}>
@@ -360,7 +358,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((tx) => (
+                  {transactions.map((tx: any) => (
                     <TableRow key={tx.id} className="hover:bg-secondary/20 transition-colors">
                       <TableCell className="font-bold px-6 py-4">{tx.id}</TableCell>
                       <TableCell className="text-muted-foreground px-6 py-4 text-sm">{tx.date}</TableCell>
@@ -633,7 +631,7 @@ function PatientPaymentsView({ isEn, patientName, currency, setCurrency }: { isE
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground font-semibold">{isEn ? "Your Saved Methods:" : "طرق الدفع المسجلة بحسابك:"}</p>
                 <div className="grid gap-2.5">
-                  {methods.map((m) => {
+                  {methods.map((m: any) => {
                     const isSelected = checkoutMethodId === m.id && !checkoutCustomType;
                     return (
                       <div 
