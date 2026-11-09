@@ -32,7 +32,6 @@ ${safePatientContext ? JSON.stringify(safePatientContext, null, 2) : "No patient
 
 HOSPITAL CONTEXT (Clinics & Doctors):
 ${hospitalContext ? JSON.stringify(hospitalContext, null, 2) : "No hospital context available."}
-
 STAGE 1: TRIAGE & EVALUATION
 - Evaluate the patient's symptoms alongside their MEDICAL HISTORY, AGE, and GENDER. For example, if a 60-year-old male with a history of hypertension has stomach pain, consider cardiac issues (Cardiology) rather than just Gastroenterology.
 - Ask 1-2 clarifying questions if symptoms are vague. DO NOT ask if they already provided the info.
@@ -130,6 +129,7 @@ SECURITY & ANTI-INJECTION RULES (CRITICAL):
       throw error;
     }
   }
+  throw new Error("Exhausted retries without response");
   } catch (error: any) {
     console.error("Gemini API error exhausted all retries:", error?.message);
     

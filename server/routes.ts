@@ -322,6 +322,22 @@ export async function registerRoutes(
         console.error("Auto WhatsApp dispatch failed on booking:", err);
       }
 
+      // Log Patient Activity for Admin
+      try {
+        const patientObj = await storage.getUser(appt.patientId);
+        const doctorObj = await storage.getUser(appt.doctorId);
+        const clinicObj = await storage.getClinic(appt.clinicId);
+        storage.createActivityLog({
+          userId: appt.patientId,
+          userName: patientObj?.name || "مريض",
+          userRole: "patient",
+          actionType: "APPOINTMENT_BOOKED",
+          title: "حجز موعد كشف جديد 📅",
+          details: `قام المريض ${patientObj?.name || ''} بحجز كشف في عيادة (${clinicObj?.name || ''}) مع د. ${doctorObj?.name || ''}.`,
+          relatedEntityId: appt.id
+        }).catch(() => {});
+      } catch (e) {}
+
       res.status(201).json({ ...appt, whatsappUrl });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -372,6 +388,34 @@ export async function registerRoutes(
           console.error("Auto WhatsApp confirmation dispatch failed:", err);
         }
       }
+
+      // Log Status Change (Cancel / Confirm)
+      try {
+        const actingUser = await storage.getUser(userId);
+        const patient = await storage.getUser(updated.patientId);
+        const doctor = await storage.getUser(updated.doctorId);
+        if (status === 'cancelled') {
+          storage.createActivityLog({
+            userId,
+            userName: actingUser?.name || "مستخدم",
+            userRole: actingUser?.role || "patient",
+            actionType: "APPOINTMENT_CANCELLED",
+            title: "إلغاء موعد كشف ❌",
+            details: `تم إلغاء موعد الكشف مع د. ${doctor?.name || ''} للمريض ${patient?.name || ''}.`,
+            relatedEntityId: updated.id
+          }).catch(() => {});
+        } else if (status === 'confirmed') {
+          storage.createActivityLog({
+            userId,
+            userName: actingUser?.name || "طبيب",
+            userRole: actingUser?.role || "doctor",
+            actionType: "APPOINTMENT_CONFIRMED",
+            title: "تأكيد واعتماد موعد كشف ✅",
+            details: `تم اعتماد موعد كشف المريض ${patient?.name || ''} مع د. ${doctor?.name || ''}.`,
+            relatedEntityId: updated.id
+          }).catch(() => {});
+        }
+      } catch (e) {}
 
       res.json(updated);
     } catch (e) {
@@ -508,6 +552,21 @@ export async function registerRoutes(
         title,
         content
       });
+
+      // Log Doctor Activity for Admin
+      try {
+        const patient = await storage.getUser(Number(patientId));
+        storage.createActivityLog({
+          userId: user.id,
+          userName: `د. ${user.name}`,
+          userRole: "doctor",
+          actionType: "REPORT_ISSUED",
+          title: "إصدار تقرير طبي معتمد 📄",
+          details: `أصدر د. ${user.name} تقريراً طبياً بعنوان: "${title}" للمريض ${patient?.name || ''}.`,
+          relatedEntityId: newReport.id
+        }).catch(() => {});
+      } catch (e) {}
+
       res.status(201).json(newReport);
     } catch(e) {
       console.error(e);
@@ -592,6 +651,21 @@ export async function registerRoutes(
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null
       });
+
+      // Log Doctor Activity for Admin
+      try {
+        const patient = await storage.getUser(Number(patientId));
+        storage.createActivityLog({
+          userId: user.id,
+          userName: `د. ${user.name}`,
+          userRole: "doctor",
+          actionType: "TREATMENT_PLAN_CREATED",
+          title: "إنشاء خطة علاجية وتأهيل 🩺",
+          details: `أنشأ د. ${user.name} خطة علاجية (${title}) للمريض ${patient?.name || ''}.`,
+          relatedEntityId: newPlan.id
+        }).catch(() => {});
+      } catch (e) {}
+
       res.status(201).json(newPlan);
     } catch(e) {
       console.error(e);
@@ -697,6 +771,20 @@ export async function registerRoutes(
         }
       }
 
+      // Log Doctor Activity for Admin
+      try {
+        const patient = await storage.getUser(Number(patientId));
+        storage.createActivityLog({
+          userId: user.id,
+          userName: `د. ${user.name}`,
+          userRole: "doctor",
+          actionType: "PRESCRIPTION_CREATED",
+          title: "تحرير روشتة علاجية 💊",
+          details: `قام د. ${user.name} بوصف (${medicationName} - ${dosage} - ${frequency}) للمريض ${patient?.name || ''}.`,
+          relatedEntityId: newPrescription.id
+        }).catch(() => {});
+      } catch (e) {}
+
       res.status(201).json(newPrescription);
     } catch (e) {
       console.error(e);
@@ -745,6 +833,169 @@ export async function registerRoutes(
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: "Server error deleting prescription" });
+    }
+  });
+
+  // --- Pharmacy Home Delivery Orders ---
+  app.get("/api/pharmacy/orders", async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(401).json({ message: "Unauthorized" });
+
+      if (user.role === 'patient') {
+        const orders = await storage.getPharmacyOrdersByPatient(userId);
+        return res.json(orders);
+      } else {
+        const orders = await storage.getPharmacyOrders();
+        return res.json(orders);
+      }
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error fetching pharmacy orders" });
+    }
+  });
+
+  app.post("/api/pharmacy/orders", async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(401).json({ message: "Unauthorized" });
+
+      const {
+        medicationNames,
+        prescriptionId,
+        deliveryAddress,
+        deliveryPhone,
+        deliveryNotes,
+        paymentMethod = "cash_on_delivery",
+        totalAmount = 0
+      } = req.body;
+
+      if (!medicationNames || !deliveryAddress) {
+        return res.status(400).json({ message: "يرجى تحديد الأدوية المطلوبة وعنوان التوصيل" });
+      }
+
+      const recipientPhone = deliveryPhone || user.phone || "+201000000000";
+
+      const order = await storage.createPharmacyOrder({
+        patientId: user.id,
+        patientName: user.name,
+        patientPhone: recipientPhone,
+        medicationNames,
+        prescriptionId: prescriptionId ? Number(prescriptionId) : null,
+        deliveryAddress,
+        deliveryNotes: deliveryNotes || null,
+        paymentMethod,
+        totalAmount: Number(totalAmount) || 0,
+        status: "pending"
+      });
+
+      // If tied to a prescription, update prescription deliveryStatus
+      if (prescriptionId) {
+        await storage.updatePrescription(Number(prescriptionId), {
+          deliveryStatus: "requested",
+          deliveryAddress,
+          deliveryPhone: recipientPhone
+        });
+      }
+
+      // Send Automated WhatsApp confirmation to the patient
+      const waMessage = 
+        `🏥 *صيدلية المستشفى الذكي*\n\n` +
+        `أهلاً بك يا ${user.name}، تم استلام طلبك لتوصيل الدواء للمنزل بنجاح! 🛵\n` +
+        `📦 *رقم الطلب:* #${order.id}\n` +
+        `💊 *الأدوية المطلوبة:* ${order.medicationNames}\n` +
+        `📍 *عنوان التوصيل:* ${order.deliveryAddress}\n` +
+        `💰 *طريقة الدفع:* ${order.paymentMethod === 'cash_on_delivery' ? 'الدفع نقداً عند الاستلام' : 'بطاقة / محفظة إلكترونية'}\n` +
+        `💵 *المبلغ المطلوب:* ${order.totalAmount} ج.م\n\n` +
+        `مندوب التوصيل سيتواصل معك خلال 45-60 دقيقة. نتمنى لك دوام الصحة والعافية! ❤️`;
+
+      sendAutomatedWhatsApp({
+        patientId: user.id,
+        patientName: user.name,
+        recipientPhone,
+        message: waMessage
+      }).catch(err => console.error("Pharmacy WA notification error:", err));
+
+      // Log Patient Activity for Admin
+      try {
+        storage.createActivityLog({
+          userId: user.id,
+          userName: user.name,
+          userRole: "patient",
+          actionType: "DELIVERY_REQUESTED",
+          title: "طلب توصيل دواء للمنزل 🛵",
+          details: `طلب المريض ${user.name} توصيل أدوية (${order.medicationNames}) إلى: ${order.deliveryAddress} بإجمالي ${order.totalAmount} ج.م.`,
+          relatedEntityId: order.id
+        }).catch(() => {});
+      } catch (e) {}
+
+      res.status(201).json(order);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error creating pharmacy order" });
+    }
+  });
+
+  app.patch("/api/pharmacy/orders/:id", async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (user?.role !== 'admin' && user?.role !== 'doctor') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const id = Number(req.params.id);
+      const { status } = req.body;
+      const updated = await storage.updatePharmacyOrder(id, { status });
+      if (!updated) return res.status(404).json({ message: "Order not found" });
+
+      // If status changed to out_for_delivery, send WhatsApp update
+      if (status === 'out_for_delivery') {
+        const waMsg = 
+          `🛵 *تحديث طلب صيدلية المستشفى (#${updated.id})*\n\n` +
+          `عزيزي ${updated.patientName}، طلبك خرج الآن مع مندوب التوصيل وهو في الطريق إلى عنوانك:\n` +
+          `📍 ${updated.deliveryAddress}\n` +
+          `يرجى تجهيز مبلغ (${updated.totalAmount} ج.م).\nنتمنى لك الشفاء العاجل!`;
+
+        sendAutomatedWhatsApp({
+          patientId: updated.patientId,
+          patientName: updated.patientName,
+          recipientPhone: updated.patientPhone,
+          message: waMsg
+        }).catch(err => console.error("WA update error:", err));
+      } else if (status === 'delivered') {
+        // Mark linked prescription as dispensed
+        if (updated.prescriptionId) {
+          await storage.updatePrescription(updated.prescriptionId, {
+            status: "dispensed",
+            deliveryStatus: "delivered"
+          });
+        }
+      }
+
+      res.json(updated);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error updating pharmacy order" });
+    }
+  });
+
+  app.delete("/api/pharmacy/orders/:id", async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const id = Number(req.params.id);
+      const deleted = await storage.deletePharmacyOrder(id);
+      if (!deleted) return res.status(404).json({ message: "Order not found" });
+      res.json({ message: "Order cancelled successfully" });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ message: "Server error cancelling order" });
     }
   });
 
@@ -801,6 +1052,20 @@ export async function registerRoutes(
           } as any);
         }
       }
+
+      // Log Doctor Activity for Admin
+      try {
+        const patient = await storage.getUser(Number(patientId));
+        storage.createActivityLog({
+          userId: user.id,
+          userName: `د. ${user.name}`,
+          userRole: "doctor",
+          actionType: "LAB_REQUESTED",
+          title: "طلب فحص معملي / أشعة 🧪",
+          details: `طلب د. ${user.name} إجراء (${testName} - ${testType}) للمريض ${patient?.name || ''}.`,
+          relatedEntityId: newLabReq.id
+        }).catch(() => {});
+      } catch (e) {}
 
       res.status(201).json(newLabReq);
     } catch (e) {
@@ -945,6 +1210,26 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Live Patient & Doctor Activity Logs / Audit Feed
+  app.get("/api/admin/activity-logs", async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (user?.role !== 'admin') {
+        return res.status(403).json({ message: "Forbidden: Admin access required" });
+      }
+
+      const role = req.query.role as string | undefined;
+      const limit = Number(req.query.limit) || 100;
+      const logs = await storage.getActivityLogs(role, limit);
+      res.json(logs);
+    } catch (e) {
+      console.error("Error fetching activity logs:", e);
+      res.status(500).json({ message: "Server error fetching activity logs" });
+    }
+  });
+
   // Payments
   app.get("/api/payments/methods", async (req, res) => {
     const userId = (req.session as any)?.userId;
@@ -991,7 +1276,9 @@ export async function registerRoutes(
 
       if (customType === "cash_reception") {
         // Only confirm appointment. Invoice remains pending.
-        await storage.updateAppointment(invoice.appointmentId, { status: 'confirmed' });
+        if (invoice.appointmentId) {
+          await storage.updateAppointment(invoice.appointmentId, { status: 'confirmed' });
+        }
         return res.json({ message: "Will pay at reception" });
       }
 
@@ -1000,15 +1287,30 @@ export async function registerRoutes(
         invoiceId: invoice.id,
         patientId: userId,
         methodId: Number(methodId),
-        amount: invoice.amount,
-        status: "success"
+        amount: invoice.amount
       });
 
       // Update invoice status
       await storage.updateInvoice(invoice.id, { status: 'paid' });
 
       // Update appointment status to confirmed
-      await storage.updateAppointment(invoice.appointmentId, { status: 'confirmed' });
+      if (invoice.appointmentId) {
+        await storage.updateAppointment(invoice.appointmentId, { status: 'confirmed' });
+      }
+
+      // Log Patient Activity for Admin
+      try {
+        const patient = await storage.getUser(userId);
+        storage.createActivityLog({
+          userId,
+          userName: patient?.name || "مريض",
+          userRole: "patient",
+          actionType: "PAYMENT_COMPLETED",
+          title: "سداد فاتورة طبية أونلاين 💳",
+          details: `قام المريض ${patient?.name || ''} بسداد فاتورة بقيمة ${invoice.amount} ج.م (${invoice.description || 'خدمات كشف وعلاج'}).`,
+          relatedEntityId: transaction.id
+        }).catch(() => {});
+      } catch (e) {}
 
       res.json({ message: "Payment successful", transaction });
     } catch(e) {
@@ -1188,6 +1490,20 @@ export async function registerRoutes(
         rating: Math.round(numRating),
         comment: comment ? String(comment).trim() : null
       });
+
+      // Log Patient Activity for Admin
+      try {
+        const doctor = await storage.getUser(doctorId);
+        storage.createActivityLog({
+          userId,
+          userName: user?.name || "مريض",
+          userRole: "patient",
+          actionType: "DOCTOR_REVIEWED",
+          title: `تقييم طبيب (${Math.round(numRating)} نجوم) ⭐`,
+          details: `منح المريض ${user?.name || ''} تقييم ${Math.round(numRating)} نجوم للدكتور ${doctor?.name || ''}${comment ? `: "${comment}"` : '.'}`,
+          relatedEntityId: review.id
+        }).catch(() => {});
+      } catch (e) {}
 
       res.status(201).json(review);
     } catch (e) {

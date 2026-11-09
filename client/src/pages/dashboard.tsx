@@ -3,11 +3,18 @@ import { useUser } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { MedicalChatbot } from "@/components/chatbot/medical-chatbot";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, Calendar, FileText, Pill, Users, ClipboardList, BriefcaseMedical, ShieldCheck, Settings, LayoutDashboard, CheckCircle2, Clock } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { 
+  Activity, Calendar, FileText, Pill, Users, ClipboardList, BriefcaseMedical, 
+  ShieldCheck, Settings, LayoutDashboard, CheckCircle2, Clock, Truck, Star, 
+  CreditCard, Search, RefreshCw, XCircle, ArrowUpRight, Sparkles, Filter 
+} from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { format, formatDistanceToNow } from "date-fns";
+import { arEG } from "date-fns/locale";
 import { useAppointments } from "@/hooks/use-appointments";
 import { useReports, useTreatmentPlans } from "@/hooks/use-records";
 import { useDoctors, useClinics } from "@/hooks/use-clinics";
@@ -36,6 +43,59 @@ export default function Dashboard() {
   // Check global language from html tag
   const isEn = typeof document !== 'undefined' && document.documentElement.lang === 'en';
   const doctorClinicObj = clinics.find((c: any) => c.id === user?.clinicId);
+
+  // Admin Live Activity Feed State
+  const [activityRoleFilter, setActivityRoleFilter] = useState<string>("all");
+  const [activitySearchQuery, setActivitySearchQuery] = useState<string>("");
+
+  const { data: activityLogs = [], isLoading: isLoadingActivityLogs, refetch: refetchActivityLogs } = useQuery<any[]>({
+    queryKey: ['/api/admin/activity-logs', activityRoleFilter],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/activity-logs${activityRoleFilter !== 'all' ? `?role=${activityRoleFilter}` : ''}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: user?.role === 'admin',
+    refetchInterval: 4000,
+  });
+
+  const getActionMeta = (actionType: string) => {
+    switch (actionType) {
+      case 'APPOINTMENT_BOOKED':
+        return { icon: Calendar, color: 'text-blue-600 bg-blue-100 dark:bg-blue-950/60 dark:text-blue-400', badge: isEn ? 'Booked Appointment' : 'حجز كشف' };
+      case 'APPOINTMENT_CANCELLED':
+        return { icon: XCircle, color: 'text-rose-600 bg-rose-100 dark:bg-rose-950/60 dark:text-rose-400', badge: isEn ? 'Cancelled Appointment' : 'إلغاء كشف' };
+      case 'APPOINTMENT_CONFIRMED':
+        return { icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400', badge: isEn ? 'Confirmed Appointment' : 'تأكيد كشف' };
+      case 'PRESCRIPTION_CREATED':
+        return { icon: Pill, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-400', badge: isEn ? 'Prescription' : 'روشتة علاج' };
+      case 'DELIVERY_REQUESTED':
+        return { icon: Truck, color: 'text-purple-600 bg-purple-100 dark:bg-purple-950/60 dark:text-purple-400', badge: isEn ? 'Home Delivery 🛵' : 'دليفري صيدلية 🛵' };
+      case 'REPORT_ISSUED':
+        return { icon: FileText, color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-950/60 dark:text-cyan-400', badge: isEn ? 'Medical Report' : 'تقرير طبي' };
+      case 'LAB_REQUESTED':
+        return { icon: ClipboardList, color: 'text-amber-600 bg-amber-100 dark:bg-amber-950/60 dark:text-amber-400', badge: isEn ? 'Lab / Radiology' : 'تحاليل وأشعة' };
+      case 'TREATMENT_PLAN_CREATED':
+        return { icon: BriefcaseMedical, color: 'text-teal-600 bg-teal-100 dark:bg-teal-950/60 dark:text-teal-400', badge: isEn ? 'Treatment Plan' : 'خطة علاجية' };
+      case 'PAYMENT_COMPLETED':
+        return { icon: CreditCard, color: 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300', badge: isEn ? 'Payment 💳' : 'سداد مالي 💳' };
+      case 'DOCTOR_REVIEWED':
+        return { icon: Star, color: 'text-amber-500 bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300', badge: isEn ? '5-Star Rating ⭐' : 'تقييم 5 نجوم ⭐' };
+      default:
+        return { icon: Activity, color: 'text-primary bg-primary/10', badge: isEn ? 'System Event' : 'عملية' };
+    }
+  };
+
+  const filteredLogs = activityLogs.filter((log: any) => {
+    if (!activitySearchQuery.trim()) return true;
+    const q = activitySearchQuery.toLowerCase();
+    return (
+      log.userName?.toLowerCase().includes(q) ||
+      log.title?.toLowerCase().includes(q) ||
+      log.details?.toLowerCase().includes(q) ||
+      log.actionType?.toLowerCase().includes(q)
+    );
+  });
 
   const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [workingHours, setWorkingHours] = useState("09:00 - 17:00");
@@ -146,6 +206,155 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* --- Live Patient & Doctor Activity Monitoring Feed --- */}
+        <Card className="rounded-[2rem] border shadow-xl bg-card overflow-hidden">
+          <CardHeader className="bg-slate-50 dark:bg-slate-800/60 p-6 md:p-8 border-b">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-primary/10 text-primary rounded-xl">
+                    <Activity className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-2xl font-black text-foreground flex items-center gap-3">
+                      {isEn ? "Live Patient & Doctor Activity Feed" : "مركز المراقبة وسجل أنشطة المرضى والأطباء المباشر"}
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        {isEn ? "Live Real-Time" : "محدث لحظياً"}
+                      </span>
+                    </CardTitle>
+                    <CardDescription className="text-sm mt-0.5">
+                      {isEn 
+                        ? "Real-time audit log of all actions taken by patients and doctors across the hospital."
+                        : "متابعة فورية لكافة العمليات التي يقوم بها الأطباء والمرضى (حجوزات، روشتات، دليفري صيدلية، تقارير، وتقييمات)."}
+                    </CardDescription>
+                  </div>
+                </div>
+              </div>
+
+              {/* Refresh Button */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refetchActivityLogs()} 
+                className="gap-2 rounded-xl border-border hover:bg-secondary font-semibold shrink-0"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingActivityLogs ? 'animate-spin' : ''}`} />
+                {isEn ? "Refresh" : "تحديث فوري"}
+              </Button>
+            </div>
+
+            {/* Filter Tabs & Search Bar */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-6">
+              <div className="flex items-center gap-1.5 bg-background/80 p-1 rounded-xl border w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setActivityRoleFilter("all")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${activityRoleFilter === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {isEn ? "All Activities" : "جميع العمليات"} ({activityLogs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivityRoleFilter("doctor")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${activityRoleFilter === 'doctor' ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  👨‍⚕️ {isEn ? "Doctors Only" : "الأطباء فقط"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivityRoleFilter("patient")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${activityRoleFilter === 'patient' ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  👤 {isEn ? "Patients Only" : "المرضى فقط"}
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-72">
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 rtl:right-3 rtl:left-auto top-3" />
+                <Input 
+                  value={activitySearchQuery} 
+                  onChange={(e) => setActivitySearchQuery(e.target.value)} 
+                  placeholder={isEn ? "Search by user or action..." : "بحث بالاسم، الدواء، أو الإجراء..."} 
+                  className="rounded-xl h-10 ps-9 rtl:pe-9 rtl:ps-3 text-xs bg-background"
+                />
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-6 md:p-8 space-y-4">
+            {isLoadingActivityLogs ? (
+              <div className="p-12 text-center text-muted-foreground">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-primary opacity-50" />
+                <span>{isEn ? "Loading live activity..." : "جاري تحميل سجل الأنشطة المباشر..."}</span>
+              </div>
+            ) : filteredLogs.length === 0 ? (
+              <div className="p-12 text-center border-2 border-dashed rounded-2xl bg-secondary/20 text-muted-foreground">
+                <Activity className="w-12 h-12 mx-auto mb-2 opacity-25" />
+                <p className="font-bold text-foreground">{isEn ? "No activities matching your filter." : "لا توجد عمليات تطابق البحث المحدد حالياً."}</p>
+                <p className="text-xs mt-1">{isEn ? "Activities performed by doctors and patients will appear here automatically." : "ستظهر هنا تلقائياً أي عمليات يقوم بها الطبيب أو المريض فور حدوثها."}</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[550px] overflow-y-auto pe-2">
+                {filteredLogs.map((log: any) => {
+                  const meta = getActionMeta(log.actionType);
+                  const IconComponent = meta.icon;
+                  const isDoctor = log.userRole === 'doctor';
+
+                  return (
+                    <div 
+                      key={log.id} 
+                      className="p-4 rounded-2xl border bg-card hover:border-primary/40 hover:shadow-md transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group"
+                    >
+                      <div className="flex items-start gap-3.5">
+                        <div className={`p-3 rounded-2xl ${meta.color} shrink-0 mt-0.5 group-hover:scale-105 transition-transform shadow-sm`}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-extrabold text-foreground text-sm md:text-base">
+                              {log.title}
+                            </span>
+                            
+                            <Badge 
+                              variant="outline" 
+                              className={`text-[10px] font-bold px-2 py-0.5 ${isDoctor ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300' : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'}`}
+                            >
+                              {isDoctor ? (isEn ? "👨‍⚕️ Doctor" : "👨‍⚕️ طبيب") : (isEn ? "👤 Patient" : "👤 مريض")}: {log.userName}
+                            </Badge>
+
+                            <Badge variant="secondary" className="text-[10px] font-semibold text-muted-foreground">
+                              {meta.badge}
+                            </Badge>
+                          </div>
+
+                          <p className="text-xs md:text-sm text-foreground/80 leading-relaxed font-medium">
+                            {log.details}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Timestamp */}
+                      <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto text-xs text-muted-foreground pt-2 sm:pt-0 border-t sm:border-t-0">
+                        <span className="font-bold text-foreground/90 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-primary" />
+                          {format(new Date(log.timestamp), 'hh:mm a', { locale: isEn ? undefined : arEG })}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true, locale: isEn ? undefined : arEG })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* System Directory & Health Status Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50 dark:bg-slate-800/50 p-6 border-b">

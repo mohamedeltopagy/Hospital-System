@@ -14,7 +14,9 @@ import type {
   Transaction, InsertTransaction,
   LabRequest, InsertLabRequest,
   DoctorReview, InsertDoctorReview,
-  WhatsappLog, InsertWhatsappLog
+  WhatsappLog, InsertWhatsappLog,
+  PharmacyOrder, InsertPharmacyOrder,
+  ActivityLog, InsertActivityLog
 } from "@shared/schema";
 
 export interface IStorage {
@@ -77,11 +79,18 @@ export interface IStorage {
   deleteLabRequest(id: number): Promise<boolean>;
 
   getServices(): Promise<Service[]>;
+  getService(id: number): Promise<Service | undefined>;
   getServicesByClinic(clinicId: number): Promise<Service[]>;
   getServicesByCategory(category: string): Promise<Service[]>;
   createService(service: InsertService): Promise<Service>;
   updateService(id: number, data: Partial<Service>): Promise<Service | undefined>;
   deleteService(id: number): Promise<boolean>;
+
+  getPharmacyOrders(): Promise<PharmacyOrder[]>;
+  getPharmacyOrdersByPatient(patientId: number): Promise<PharmacyOrder[]>;
+  createPharmacyOrder(order: InsertPharmacyOrder): Promise<PharmacyOrder>;
+  updatePharmacyOrder(id: number, data: Partial<PharmacyOrder>): Promise<PharmacyOrder | undefined>;
+  deletePharmacyOrder(id: number): Promise<boolean>;
 
   getPaymentMethods(patientId: number): Promise<PaymentMethod[]>;
   createPaymentMethod(method: InsertPaymentMethod): Promise<PaymentMethod>;
@@ -94,6 +103,9 @@ export interface IStorage {
 
   getTransactions(patientId: number): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+
+  getActivityLogs(role?: string, limit?: number): Promise<ActivityLog[]>;
+  createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
 
   cleanDatabase(): Promise<void>;
 }
@@ -116,6 +128,64 @@ export class MemoryStorage implements IStorage {
     { id: 3, doctorId: 2, patientId: 5, patientName: "محمود علي", rating: 4, comment: "تعامل راقي جداً واهتمام كبير من الطبيب وطاقم التمريض.", date: new Date() }
   ];
   private whatsappLogs: WhatsappLog[] = [];
+  private pharmacyOrders: PharmacyOrder[] = [];
+  private activityLogs: ActivityLog[] = [
+    {
+      id: 1,
+      userId: 3,
+      userName: "علي أحمد",
+      userRole: "patient",
+      actionType: "APPOINTMENT_BOOKED",
+      title: "حجز موعد كشف بعيادة الباطنة",
+      details: "قام المريض بحجز موعد كشف مع د. سارة محمد في عيادة الباطنة العامة.",
+      relatedEntityId: 1,
+      timestamp: new Date(Date.now() - 1000 * 60 * 18)
+    },
+    {
+      id: 2,
+      userId: 2,
+      userName: "د. سارة محمد",
+      userRole: "doctor",
+      actionType: "PRESCRIPTION_CREATED",
+      title: "تحرير روشتة علاجية جديدة",
+      details: "قامت الطبيبة بوصف دواء (Augmentin 1g - قرص كل 12 ساعة) للمريض علي أحمد.",
+      relatedEntityId: 1,
+      timestamp: new Date(Date.now() - 1000 * 60 * 12)
+    },
+    {
+      id: 3,
+      userId: 3,
+      userName: "علي أحمد",
+      userRole: "patient",
+      actionType: "DELIVERY_REQUESTED",
+      title: "طلب توصيل أدوية للمنزل",
+      details: "طلب المريض توصيل علاج الروشتة للمنزل إلى: (المعادي - شارع 9 - عمارة 12 شقة 4) بقيمة 105 ج.م.",
+      relatedEntityId: 1,
+      timestamp: new Date(Date.now() - 1000 * 60 * 8)
+    },
+    {
+      id: 4,
+      userId: 2,
+      userName: "د. سارة محمد",
+      userRole: "doctor",
+      actionType: "REPORT_ISSUED",
+      title: "إصدار تقرير طبي معتمد",
+      details: "تم تحرير تقرير الاستشارة الطبية الشاملة وتحديث السجل الصحي للمريض.",
+      relatedEntityId: 1,
+      timestamp: new Date(Date.now() - 1000 * 60 * 5)
+    },
+    {
+      id: 5,
+      userId: 3,
+      userName: "علي أحمد",
+      userRole: "patient",
+      actionType: "DOCTOR_REVIEWED",
+      title: "تقييم كشف الطبيب (5 نجوم)",
+      details: "منح المريض تقييم 5 نجوم للدكتورة سارة محمد مع تعليق: 'طبيبة ممتازة جداً ومتابعة دقيقة'.",
+      relatedEntityId: 1,
+      timestamp: new Date(Date.now() - 1000 * 60 * 2)
+    }
+  ];
   private services: Service[] = [
     { id: 1, clinicId: 1, category: "clinic", name: "كشف استشارة عيادة الباطنة العامة", price: 200, description: "كشف شامل وتشخيص مبدئي للمريض مع قياس العلامات الحيوية" },
     { id: 2, clinicId: 1, category: "clinic", name: "فحص السكر التراكمي العاجل (HbA1c)", price: 150, description: "تحليل معملي فوري داخل العيادة للسكري" },
@@ -129,7 +199,7 @@ export class MemoryStorage implements IStorage {
     { id: 8, clinicId: null, category: "pharmacy", name: "Panadol Advance 500mg", price: 15, description: "مسكن للآلام وخافض للحرارة" },
     { id: 9, clinicId: null, category: "pharmacy", name: "Augmentin 1g", price: 85, description: "مضاد حيوي واسع المجال" }
   ];
-  private nextId = { user: 1, clinic: 1, appointment: 1, history: 1, report: 1, plan: 1, prescription: 1, labRequest: 1, service: 10, paymentMethod: 1, invoice: 1, transaction: 1, doctorReview: 4, whatsappLog: 1 };
+  private nextId = { user: 1, clinic: 1, appointment: 1, history: 1, report: 1, plan: 1, prescription: 1, labRequest: 1, service: 10, paymentMethod: 1, invoice: 1, transaction: 1, doctorReview: 4, whatsappLog: 1, pharmacyOrder: 1, activityLog: 6 };
 
   constructor() {
     const dbPath = path.resolve(process.cwd(), "database.json");
@@ -146,6 +216,8 @@ export class MemoryStorage implements IStorage {
         if (data.appointments) data.appointments.forEach((a: any) => { if(a.datetime) a.datetime = new Date(a.datetime) });
         if (data.doctorReviews) data.doctorReviews.forEach((dr: any) => dr.date = new Date(dr.date));
         if (data.whatsappLogs) data.whatsappLogs.forEach((w: any) => w.sentAt = new Date(w.sentAt));
+        if (data.pharmacyOrders) data.pharmacyOrders.forEach((o: any) => o.orderDate = new Date(o.orderDate));
+        if (data.activityLogs) data.activityLogs.forEach((al: any) => al.timestamp = new Date(al.timestamp));
 
         Object.assign(this, data);
       } catch (e) {
@@ -178,6 +250,8 @@ export class MemoryStorage implements IStorage {
     this.paymentMethods = [];
     this.invoices = [];
     this.transactions = [];
+    this.pharmacyOrders = [];
+    this.activityLogs = [];
     // Keep root admin account so admin can continue adding doctors/patients, wipe all other users (doctors/patients)
     this.users = this.users.filter(u => u.username === 'admin1' || u.role === 'admin');
     // Reset clinic doctor counts
@@ -192,6 +266,8 @@ export class MemoryStorage implements IStorage {
     this.nextId.paymentMethod = 1;
     this.nextId.invoice = 1;
     this.nextId.transaction = 1;
+    this.nextId.pharmacyOrder = 1;
+    this.nextId.activityLog = 1;
   }
 
   async getUser(id: number) { return this.users.find(u => u.id === id); }
@@ -199,10 +275,13 @@ export class MemoryStorage implements IStorage {
   async createUser(data: InsertUser): Promise<User> {
     const user: User = { 
       id: this.nextId.user++, 
-      clinicId: null, 
-      bio: null, 
+      clinicId: data.clinicId || null, 
+      bio: data.bio || null, 
       workingDays: data.role === 'doctor' ? (data.workingDays || "0,1,2,3,4") : null, 
       workingHours: data.role === 'doctor' ? (data.workingHours || "09:00 - 17:00") : null, 
+      gender: data.gender || null,
+      dateOfBirth: data.dateOfBirth || null,
+      phone: data.phone || null,
       ...data 
     };
     this.users.push(user);
@@ -349,7 +428,16 @@ export class MemoryStorage implements IStorage {
   async getPrescriptionsByPatient(patientId: number) { return this.prescriptions.filter(p => p.patientId === patientId); }
   async getPrescriptionsByDoctor(doctorId: number) { return this.prescriptions.filter(p => p.doctorId === doctorId); }
   async createPrescription(data: InsertPrescription): Promise<Prescription> {
-    const prescription: Prescription = { id: this.nextId.prescription++, date: new Date(), status: 'active', notes: null, ...data };
+    const prescription: Prescription = { 
+      id: this.nextId.prescription++, 
+      date: new Date(), 
+      status: 'active', 
+      notes: null,
+      deliveryStatus: data.deliveryStatus || 'none',
+      deliveryAddress: data.deliveryAddress || null,
+      deliveryPhone: data.deliveryPhone || null,
+      ...data 
+    };
     this.prescriptions.push(prescription);
     return prescription;
   }
@@ -386,8 +474,57 @@ export class MemoryStorage implements IStorage {
   }
 
   async getServices() { return this.services; }
+  async getService(id: number) { return this.services.find(s => s.id === id); }
   async getServicesByClinic(clinicId: number) { return this.services.filter(s => s.clinicId === clinicId); }
   async getServicesByCategory(category: string) { return this.services.filter(s => s.category === category); }
+
+  async getPharmacyOrders() { return this.pharmacyOrders; }
+  async getPharmacyOrdersByPatient(patientId: number) { return this.pharmacyOrders.filter(o => o.patientId === patientId); }
+  async createPharmacyOrder(data: InsertPharmacyOrder): Promise<PharmacyOrder> {
+    const order: PharmacyOrder = {
+      id: this.nextId.pharmacyOrder++,
+      orderDate: new Date(),
+      status: 'pending',
+      prescriptionId: data.prescriptionId || null,
+      deliveryNotes: data.deliveryNotes || null,
+      paymentMethod: data.paymentMethod || 'cash_on_delivery',
+      totalAmount: data.totalAmount || 0,
+      ...data
+    };
+    this.pharmacyOrders.unshift(order);
+    return order;
+  }
+  async updatePharmacyOrder(id: number, data: Partial<PharmacyOrder>): Promise<PharmacyOrder | undefined> {
+    const idx = this.pharmacyOrders.findIndex(o => o.id === id);
+    if (idx === -1) return undefined;
+    this.pharmacyOrders[idx] = { ...this.pharmacyOrders[idx], ...data };
+    return this.pharmacyOrders[idx];
+  }
+  async deletePharmacyOrder(id: number): Promise<boolean> {
+    const initialLen = this.pharmacyOrders.length;
+    this.pharmacyOrders = this.pharmacyOrders.filter(o => o.id !== id);
+    return this.pharmacyOrders.length < initialLen;
+  }
+
+  async getActivityLogs(role?: string, limit: number = 100): Promise<ActivityLog[]> {
+    let logs = this.activityLogs;
+    if (role && role !== 'all') {
+      logs = logs.filter(l => l.userRole === role);
+    }
+    return logs.slice(0, limit);
+  }
+
+  async createActivityLog(data: InsertActivityLog): Promise<ActivityLog> {
+    const log: ActivityLog = {
+      id: this.nextId.activityLog++,
+      timestamp: new Date(),
+      relatedEntityId: data.relatedEntityId || null,
+      ...data
+    };
+    this.activityLogs.unshift(log);
+    if (this.activityLogs.length > 500) this.activityLogs.pop();
+    return log;
+  }
 
   async createService(data: InsertService): Promise<Service> {
     const service: Service = { 
@@ -427,7 +564,15 @@ export class MemoryStorage implements IStorage {
   async getInvoices(patientId: number) { return this.invoices.filter(i => i.patientId === patientId); }
   async getInvoice(id: number) { return this.invoices.find(i => i.id === id); }
   async createInvoice(data: InsertInvoice): Promise<Invoice> {
-    const invoice: Invoice = { id: this.nextId.invoice++, status: "pending", currency: "EGP", date: new Date(), ...data };
+    const invoice: Invoice = { 
+      id: this.nextId.invoice++, 
+      status: "pending", 
+      currency: "EGP", 
+      date: new Date(), 
+      description: data.description || null,
+      appointmentId: data.appointmentId || null,
+      ...data 
+    };
     this.invoices.push(invoice);
     return invoice;
   }

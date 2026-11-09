@@ -72,6 +72,9 @@ export const prescriptions = pgTable("prescriptions", {
   notes: text("notes"),
   date: timestamp("date").defaultNow(),
   status: text("status").notNull().default("active"), // active, dispensed, completed
+  deliveryStatus: text("delivery_status").default("none"), // none, requested, out_for_delivery, delivered
+  deliveryAddress: text("delivery_address"),
+  deliveryPhone: text("delivery_phone"),
 });
 
 export const labRequests = pgTable("lab_requests", {
@@ -148,6 +151,33 @@ export const whatsappLogs = pgTable("whatsapp_logs", {
   sentAt: timestamp("sent_at").defaultNow(),
 });
 
+export const pharmacyOrders = pgTable("pharmacy_orders", {
+  id: serial("id").primaryKey(),
+  patientId: integer("patient_id").notNull(),
+  patientName: text("patient_name").notNull(),
+  patientPhone: text("patient_phone").notNull(),
+  medicationNames: text("medication_names").notNull(),
+  prescriptionId: integer("prescription_id"),
+  deliveryAddress: text("delivery_address").notNull(),
+  deliveryNotes: text("delivery_notes"),
+  paymentMethod: text("payment_method").notNull().default("cash_on_delivery"), // 'cash_on_delivery', 'card', 'wallet'
+  totalAmount: integer("total_amount").notNull().default(0),
+  status: text("status").notNull().default("pending"), // 'pending', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'
+  orderDate: timestamp("order_date").defaultNow(),
+});
+
+export const activityLogs = pgTable("activity_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  userName: text("user_name").notNull(),
+  userRole: text("user_role").notNull(), // 'patient', 'doctor', 'admin'
+  actionType: text("action_type").notNull(), // 'APPOINTMENT_BOOKED', 'APPOINTMENT_CANCELLED', 'PRESCRIPTION_CREATED', 'DELIVERY_REQUESTED', 'PAYMENT_COMPLETED', 'REPORT_ISSUED', 'LAB_REQUESTED', 'TREATMENT_PLAN_CREATED', 'DOCTOR_REVIEWED'
+  title: text("title").notNull(),
+  details: text("details").notNull(),
+  relatedEntityId: integer("related_entity_id"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertClinicSchema = createInsertSchema(clinics).omit({ id: true, doctorCount: true });
 export const insertAppointmentSchema = createInsertSchema(appointments).omit({ id: true, status: true });
@@ -162,6 +192,8 @@ export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true,
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, date: true, status: true });
 export const insertDoctorReviewSchema = createInsertSchema(doctorReviews).omit({ id: true, date: true });
 export const insertWhatsappLogSchema = createInsertSchema(whatsappLogs).omit({ id: true, sentAt: true });
+export const insertPharmacyOrderSchema = createInsertSchema(pharmacyOrders).omit({ id: true, orderDate: true });
+export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, timestamp: true });
 
 // Explicit API Contract Types
 export type User = typeof users.$inferSelect;
@@ -205,6 +237,12 @@ export type InsertDoctorReview = z.infer<typeof insertDoctorReviewSchema>;
 
 export type WhatsappLog = typeof whatsappLogs.$inferSelect;
 export type InsertWhatsappLog = z.infer<typeof insertWhatsappLogSchema>;
+
+export type PharmacyOrder = typeof pharmacyOrders.$inferSelect;
+export type InsertPharmacyOrder = z.infer<typeof insertPharmacyOrderSchema>;
+
+export type ActivityLog = typeof activityLogs.$inferSelect;
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 
 export const loginSchema = z.object({
   username: z.string(),
