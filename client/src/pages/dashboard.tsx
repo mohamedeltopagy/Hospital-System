@@ -621,7 +621,35 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             ) : (
-              <MedicalChatbot />
+              <div className="space-y-6">
+                {/* AI Companion Quick Promo Banner */}
+                <Card className="rounded-[1.5rem] border-emerald-500/30 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white shadow-lg overflow-hidden relative">
+                  <CardContent className="p-6 sm:p-7 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+                    <div className="space-y-2">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                        <span>{isEn ? "New AI Vision Feature" : "ميزة جديدة بالذكاء الاصطناعي والرؤية"}</span>
+                      </div>
+                      <h3 className="text-xl sm:text-2xl font-black">
+                        {isEn ? "Smart Prescription Decoder & AI Companion 💊" : "رفيق المريض الذكي وفك شفرة الروشتات 💊"}
+                      </h3>
+                      <p className="text-emerald-100 text-xs sm:text-sm max-w-xl leading-relaxed">
+                        {isEn 
+                          ? "Snap a photo of your handwritten prescription to decode medications, build a smart daily routine, check drug safety, and order delivery!"
+                          : "صور روشتتك بخط يد الطبيب لفك شفرتها فوراً، تنظيم جدول الجرعات اليومي، فحص الأمان الدوائي، وطلب العلاج للبيت بنقرة واحدة!"}
+                      </p>
+                    </div>
+                    <Link href="/ai-companion">
+                      <Button className="bg-white hover:bg-slate-100 text-emerald-800 font-extrabold px-6 py-5 rounded-xl shadow-md shrink-0 gap-2 text-sm">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <span>{isEn ? "Try AI Companion" : "جرب الرفيق الذكي الآن ✨"}</span>
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <MedicalChatbot />
+              </div>
             )}
           </div>
         </div>

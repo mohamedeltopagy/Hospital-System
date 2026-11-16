@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { 
   HeartPulse, Activity, FileText, ClipboardList, 
   Calendar, CreditCard, Stethoscope, Home, ChevronDown, User, LogOut, Settings,
-  Languages, Moon, Sun, Users, Pill, Microscope
+  Languages, Moon, Sun, Users, Pill, Microscope, Sparkles
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { 
@@ -61,6 +61,7 @@ export function AppSidebar() {
   if (user?.role === "doctor") {
     navItems = isEn ? [
       { title: "Dashboard", url: "/", icon: Home },
+      { title: "AI Health Companion", url: "/ai-companion", icon: Sparkles },
       { title: "Patient Directory", url: "/patients", icon: Users },
       { title: "Clinics", url: "/clinics", icon: Stethoscope },
       { title: "Appointments", url: "/appointments", icon: Calendar },
@@ -73,6 +74,7 @@ export function AppSidebar() {
       { title: "Settings", url: "/settings", icon: Settings },
     ] : [
       { title: "الرئيسية", url: "/", icon: Home },
+      { title: "رفيق الروشتة الذكي ✨", url: "/ai-companion", icon: Sparkles },
       { title: "إدارة ملفات المرضى", url: "/patients", icon: Users },
       { title: "العيادات الطبية", url: "/clinics", icon: Stethoscope },
       { title: "جدول المواعيد", url: "/appointments", icon: Calendar },
@@ -87,6 +89,7 @@ export function AppSidebar() {
   } else if (user?.role === "admin") {
     navItems = isEn ? [
       { title: "Dashboard", url: "/", icon: Home },
+      { title: "AI Health Companion", url: "/ai-companion", icon: Sparkles },
       { title: "Patient Directory", url: "/patients", icon: Users },
       { title: "Doctors' Appointments", url: "/appointments", icon: Calendar },
       { title: "Manage Clinics", url: "/clinics", icon: Stethoscope },
@@ -96,6 +99,7 @@ export function AppSidebar() {
       { title: "Settings", url: "/settings", icon: Settings },
     ] : [
       { title: "الرئيسية", url: "/", icon: Home },
+      { title: "رفيق الروشتة الذكي ✨", url: "/ai-companion", icon: Sparkles },
       { title: "دليل ملفات المرضى", url: "/patients", icon: Users },
       { title: "مواعيد الأطباء", url: "/appointments", icon: Calendar },
       { title: "إدارة العيادات", url: "/clinics", icon: Stethoscope },
@@ -108,6 +112,7 @@ export function AppSidebar() {
     // Default to Patient Role View
     navItems = isEn ? [
       { title: "Dashboard", url: "/", icon: Home },
+      { title: "AI Health Companion", url: "/ai-companion", icon: Sparkles },
       { title: "Appointments", url: "/appointments", icon: Calendar },
       { title: "Medical History", url: "/medical-history", icon: Activity },
       { title: "Reports", url: "/reports", icon: FileText },
@@ -118,6 +123,7 @@ export function AppSidebar() {
       { title: "Settings", url: "/settings", icon: Settings },
     ] : [
       { title: "الرئيسية", url: "/", icon: Home },
+      { title: "رفيق الروشتة الذكي ✨", url: "/ai-companion", icon: Sparkles },
       { title: "حجز موعد", url: "/appointments", icon: Calendar },
       { title: "التاريخ المرضي", url: "/medical-history", icon: Activity },
       { title: "التقارير", url: "/reports", icon: FileText },

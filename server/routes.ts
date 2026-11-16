@@ -5,7 +5,7 @@ import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
 import session from "express-session";
 import MemoryStore from "memorystore";
-import { getMedicalResponse, type ChatMessage } from "./ai";
+import { getMedicalResponse, analyzePrescriptionOrReport, askMedicationCompanion, type ChatMessage } from "./ai";
 import { PSOOptimizer } from "./psoOptimizer";
 import { 
   authRateLimiter, 
@@ -1404,6 +1404,185 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Chat error:", err);
       res.status(500).json({ message: "AI service error" });
+    }
+  });
+
+  // --- AI Smart Patient Companion & Prescription Decoder ---
+  app.post("/api/ai/decode-prescription", aiRateLimiter, async (req, res) => {
+    try {
+      const { imageBase64, mimeType, textNotes } = req.body;
+      const userId = (req.session as any)?.userId;
+      
+      let patientContext = null;
+      let userName = "مريض";
+      if (userId) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          userName = user.name;
+          const mHistory = await storage.getMedicalHistoryByPatient(userId);
+          patientContext = {
+            id: user.id,
+            name: user.name,
+            gender: user.gender || "Unknown",
+            age: user.dateOfBirth ? Math.floor((new Date().getTime() - new Date(user.dateOfBirth).getTime()) / 31557600000) : "Unknown",
+            medicalHistory: mHistory.map(h => h.condition + " (" + (h.notes || "") + ")").join(", ")
+          };
+        }
+      }
+
+      const analysis = await analyzePrescriptionOrReport(
+        imageBase64,
+        mimeType || "image/jpeg",
+        patientContext,
+        textNotes
+      );
+
+      // Audit log for Admin Live Feed
+      if (userId) {
+        await storage.createActivityLog({
+          userId,
+          userName,
+          userRole: "patient",
+          actionType: "PRESCRIPTION_CREATED",
+          title: "فك شفرة روشتة بالذكاء الاصطناعي 📑",
+          details: `قام المريض ${userName} بتحليل روشتة طبية تضم ${analysis.medications?.length || 0} أدوية وتنظيم جدول الجرعات اليومي`,
+          relatedEntityId: null
+        });
+      }
+
+      res.json({ success: true, analysis });
+    } catch (err: any) {
+      console.error("Prescription decode error:", err);
+      res.status(500).json({ message: "فشل في فك شفرة الروشتة عبر الذكاء الاصطناعي" });
+    }
+  });
+
+  app.post("/api/ai/companion-ask", aiRateLimiter, async (req, res) => {
+    try {
+      const { question, context } = req.body;
+      if (!question) {
+        return res.status(400).json({ message: "Question is required" });
+      }
+
+      const userId = (req.session as any)?.userId;
+      let patientContext = null;
+      if (userId) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          patientContext = { name: user.name, gender: user.gender };
+        }
+      }
+
+      const answer = await askMedicationCompanion(question, context, patientContext);
+      res.json({ answer });
+    } catch (err: any) {
+      console.error("Companion ask error:", err);
+      res.status(500).json({ message: "فشل في الحصول على إجابة من الرفيق الطبي" });
+    }
+  });
+
+  app.post("/api/ai/send-schedule-whatsapp", async (req, res) => {
+    try {
+      const { schedule, medications, customPhone } = req.body;
+      const userId = (req.session as any)?.userId;
+      const user = userId ? await storage.getUser(userId) : null;
+      
+      const recipientPhone = customPhone || user?.phone || "01000000000";
+      const patientName = user?.name || "عزيزي المريض";
+
+      // Build structured, beautiful WhatsApp message
+      let message = `🏥 *مستشفى الرعاية الذكية - جدول أدويتك اليومي المنظم* 💊\n\n`;
+      message += `مرحباً بك: *${patientName}*\n`;
+      message += `قام رفيقك الطبي الذكي بتنظيم مواعيد علاجك وتأكيد توافقها:\n\n`;
+
+      if (Array.isArray(schedule) && schedule.length > 0) {
+        schedule.forEach((slot: any) => {
+          if (slot.items && slot.items.length > 0) {
+            message += `⏰ *${slot.periodArabic || slot.period} (${slot.time}):*\n`;
+            slot.items.forEach((item: any) => {
+              message += `  • *${item.medicationName}:* ${item.instruction}\n`;
+            });
+            message += `\n`;
+          }
+        });
+      } else if (Array.isArray(medications)) {
+        message += `📋 *قائمة الأدوية الموصوفة:*\n`;
+        medications.forEach((med: any) => {
+          message += `• *${med.name}* (${med.dosage}) - ${med.frequency}\n  _التعليمات:_ ${med.instructions}\n`;
+        });
+      }
+
+      message += `💡 *نصيحة أمان:* اشرب كميات كافية من الماء (2-3 لتر) ولا تضاعف الجرعة إذا نسيتها.\n\n`;
+      message += `🩺 نتمنى لك دوام الصحة والعافية والشفاء العاجل! 💚`;
+
+      const result = await sendAutomatedWhatsApp({
+        patientId: userId || undefined,
+        patientName,
+        recipientPhone,
+        message,
+      });
+
+      res.json({ success: true, result, recipientPhone });
+    } catch (err: any) {
+      console.error("Send schedule WhatsApp error:", err);
+      res.status(500).json({ message: "فشل إرسال جدول الأدوية عبر الواتساب" });
+    }
+  });
+
+  app.post("/api/ai/order-decoded-meds", async (req, res) => {
+    try {
+      const { medications, deliveryAddress, deliveryPhone, deliveryNotes } = req.body;
+      const userId = (req.session as any)?.userId;
+      const user = userId ? await storage.getUser(userId) : null;
+
+      if (!deliveryAddress || !deliveryPhone) {
+        return res.status(400).json({ message: "العنوان ورقم الهاتف مطلوبان للتوصيل" });
+      }
+
+      const medNames = Array.isArray(medications) 
+        ? medications.map((m: any) => `${m.name} (${m.dosage})`).join(" + ")
+        : String(medications);
+
+      const order = await storage.createPharmacyOrder({
+        patientId: userId || 0,
+        patientName: user?.name || "مريض خارجي",
+        patientPhone: deliveryPhone,
+        medicationNames: medNames,
+        deliveryAddress,
+        deliveryNotes: deliveryNotes || "طلب تم إنشاؤه آلياً بواسطة رفيق فك شفرة الروشتات الذكي",
+        paymentMethod: "cash_on_delivery",
+        totalAmount: 180, // Estimated SAR / EGP
+        status: "pending",
+        prescriptionId: null
+      });
+
+      // Automated WhatsApp Notification to Patient
+      const waMsg = `🛵 *مستشفى الرعاية الذكية - تأكيد طلب صيدلية دليفري*\n\nمرحباً بك: *${user?.name || 'عزيزي العميل'}*\nتم استلام طلب الأدوية المفكوكة من الروشتة بنجاح عبر الرفيق الطبي الذكي!\n\n📦 *الأدوية المطلوبة:* ${medNames}\n📍 *عنوان التوصيل:* ${deliveryAddress}\n📱 *رقم التواصل:* ${deliveryPhone}\n⏳ *حالة الطلب:* جاري التجهيز في صيدلية المستشفى.\n\nسيصلك مندوب التوصيل في أسرع وقت. شفاك الله وعافاك! 🌿`;
+
+      await sendAutomatedWhatsApp({
+        patientId: userId || undefined,
+        patientName: user?.name || "المريض",
+        recipientPhone: deliveryPhone,
+        message: waMsg,
+      });
+
+      // Log activity
+      if (userId && user) {
+        await storage.createActivityLog({
+          userId: user.id,
+          userName: user.name,
+          userRole: "patient",
+          actionType: "DELIVERY_REQUESTED",
+          title: "طلب أدوية من الروشتة الذكية 🛵",
+          details: `طلب توصيل أدوية الروشتة إلى ${deliveryAddress}`,
+          relatedEntityId: order.id
+        });
+      }
+
+      res.json({ success: true, order });
+    } catch (err: any) {
+      console.error("Order decoded meds error:", err);
+      res.status(500).json({ message: "فشل إنشاء طلب الأدوية" });
     }
   });
 

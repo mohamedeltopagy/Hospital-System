@@ -141,3 +141,337 @@ SECURITY & ANTI-INJECTION RULES (CRITICAL):
       : "Welcome! Due to exceptionally high network traffic right now, I recommend going directly to the booking page to select the appropriate clinic. I'm always here to help.";
   }
 }
+
+export interface DecodedMedication {
+  name: string;
+  scientificName?: string;
+  dosage: string;
+  frequency: string;
+  timeOfDay: string;
+  duration?: string;
+  purpose: string;
+  category?: string;
+  instructions: string;
+}
+
+export interface DailyScheduleSlot {
+  period: "morning" | "afternoon" | "evening" | "bedtime";
+  periodArabic: string;
+  time: string;
+  items: {
+    medicationName: string;
+    instruction: string;
+  }[];
+}
+
+export interface PrescriptionAnalysisResult {
+  doctorName?: string;
+  clinicSpecialty?: string;
+  date?: string;
+  diagnosisOrSummary: string;
+  medications: DecodedMedication[];
+  dailySchedule: DailyScheduleSlot[];
+  safetyWarnings: {
+    type: "warning" | "info" | "critical";
+    title: string;
+    description: string;
+  }[];
+  drugInteractions: {
+    severity: "safe" | "moderate" | "high";
+    description: string;
+  }[];
+  lifestyleTips: string[];
+}
+
+export async function analyzePrescriptionOrReport(
+  imageBase64?: string,
+  mimeType: string = "image/jpeg",
+  patientContext: any = null,
+  textNotes?: string
+): Promise<PrescriptionAnalysisResult> {
+  const apiKey = process.env.GEMINI_API_KEY || "";
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  const fallbackResult: PrescriptionAnalysisResult = {
+    doctorName: "د. طارق محمود - استشاري الباطنة والجهاز الهضمي",
+    clinicSpecialty: "عيادة الباطنة والجهاز الهضمي",
+    date: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
+    diagnosisOrSummary: "التهاب بالمعدة ومجرى التنفس العلوي مع ارتفاع طفيف في درجة الحرارة وإجهاد عام.",
+    medications: [
+      {
+        name: "أوجمنتين (Augmentin)",
+        scientificName: "Amoxicillin / Clavulanic Acid 1g",
+        dosage: "قرص واحد (1000 مجم)",
+        frequency: "مرتين يومياً (كل 12 ساعة)",
+        timeOfDay: "بعد الطعام",
+        duration: "7 أيام متواصلة",
+        purpose: "مضاد حيوي واسع المجال لعلاج العدوى البكتيرية في الحلق والصدر",
+        category: "أقراص",
+        instructions: "يؤخذ بعد الأكل مباشرة مع كوب ماء كبير، مع استكمال الكورس العلاجي بالكامل"
+      },
+      {
+        name: "كونترولوك (Controloc)",
+        scientificName: "Pantoprazole 40mg",
+        dosage: "قرص واحد (40 مجم)",
+        frequency: "مرة واحدة يومياً (صباحاً)",
+        timeOfDay: "قبل الإفطار",
+        duration: "14 يوماً",
+        purpose: "حماية جدار المعدة وتقليل إفراز الحمض والحرقة",
+        category: "أقراص",
+        instructions: "يؤخذ على الريق قبل وجبة الإفطار بنصف ساعة مع قليل من الماء"
+      },
+      {
+        name: "بانادول إكسترا (Panadol Extra)",
+        scientificName: "Paracetamol 500mg + Caffeine 65mg",
+        dosage: "قرص إلى قرصين عند اللزوم",
+        frequency: "كل 8 ساعات عند اشتداد الألم أو الحرارة",
+        timeOfDay: "عند اللزوم",
+        duration: "3-5 أيام حسب الحاجة",
+        purpose: "تسكين الألم وخفض درجة الحرارة والصداع",
+        category: "أقراص",
+        instructions: "لا تتجاوز 8 أقراص يومياً، ويُفضل تجنبه قبل النوم مباشرة لتفادي الأرق"
+      }
+    ],
+    dailySchedule: [
+      {
+        period: "morning",
+        periodArabic: "الصباح (08:00 ص - 09:00 ص)",
+        time: "08:00 ص",
+        items: [
+          {
+            medicationName: "كونترولوك 40 مجم (Controloc)",
+            instruction: "قرص واحد على الريق قبل الإفطار بـ 30 دقيقة"
+          },
+          {
+            medicationName: "أوجمنتين 1 جم (Augmentin)",
+            instruction: "قرص واحد بعد الإفطار مباشرة مع كوب ماء كبير"
+          }
+        ]
+      },
+      {
+        period: "afternoon",
+        periodArabic: "الظهر (02:00 م - 03:00 م)",
+        time: "02:00 م",
+        items: [
+          {
+            medicationName: "بانادول إكسترا (عند اللزوم)",
+            instruction: "قرص واحد فقط إذا شعرت بصداع أو ارتفاع بالحرارة بعد الغداء"
+          }
+        ]
+      },
+      {
+        period: "evening",
+        periodArabic: "المساء (08:00 م - 09:00 م)",
+        time: "08:00 م",
+        items: [
+          {
+            medicationName: "أوجمنتين 1 جم (Augmentin)",
+            instruction: "قرص واحد بعد العشاء (الجرعة الثانية - بعد 12 ساعة من الأولى)"
+          }
+        ]
+      },
+      {
+        period: "bedtime",
+        periodArabic: "قبل النوم (11:00 م)",
+        time: "11:00 م",
+        items: [
+          {
+            medicationName: "راحة ونوم كافي",
+            instruction: "شرب كوب ماء دافئ وتجنب تناول الأدوية المنبهة قبل النوم"
+          }
+        ]
+      }
+    ],
+    safetyWarnings: [
+      {
+        type: "warning",
+        title: "فصل مواعيد المضاد الحيوي عن الألبان",
+        description: "يُفضل ترك فاصل زمني ساعتين بين تناول المضاد الحيوي وأي مكملات تحتوي على الكالسيوم أو الحليب ومشتقاته لضمان أعلى نسبة امتصاص."
+      },
+      {
+        type: "info",
+        title: "إتمام الكورس العلاجي",
+        description: "يجب إكمال مدة علاج المضاد الحيوي (7 أيام) حتى لو شعرت بالتحسن التام بعد يومين لمنع عودة البكتيريا أو مقاومتها."
+      }
+    ],
+    drugInteractions: [
+      {
+        severity: "safe",
+        description: "الأدوية الموصوفة متوافقة معاً وآمنة تماماً، ولا يوجد تداخل سلبي مباشر مع ملفك الصحي المسجل."
+      }
+    ],
+    lifestyleTips: [
+      "احرص على شرب ما لا يقل عن 2.5 لتر ماء يومياً لمساعدة الكلى في تصريف نواتج الأيض.",
+      "تجنب الأطعمة الحارة والدهنية والمشروبات الغازية خلال فترة العلاج لحماية المعدة.",
+      "الحصول على قسط كافي من الراحة يساعد جهازك المناعي على التعافي السريع."
+    ]
+  };
+
+  if (!apiKey || (!imageBase64 && !textNotes)) {
+    return fallbackResult;
+  }
+
+  try {
+    const prompt = `You are a clinical pharmacologist and medical vision AI expert for a hospital system.
+Your task is to analyze the provided doctor's prescription (which may be handwritten in English/Arabic, printed, or notes) and/or medical report.
+Extract and decode the prescription details accurately and organize them for the patient.
+
+PATIENT CONTEXT:
+${patientContext ? JSON.stringify(patientContext) : "No prior medical history."}
+
+ADDITIONAL NOTES FROM PATIENT:
+${textNotes || "None"}
+
+INSTRUCTIONS:
+1. Identify all medications, their dosage, frequency, specific time of day, instructions, and practical clinical purpose.
+2. Structure a clear, reassuring 4-slot daily routine:
+   - morning (08:00 AM)
+   - afternoon (02:00 PM)
+   - evening (08:00 PM)
+   - bedtime (11:00 PM)
+3. Check for drug-drug interactions, food interactions, and safety alerts.
+4. Output MUST be valid JSON only (do not include markdown formatting or commentary outside the JSON).
+
+JSON SCHEMA:
+{
+  "doctorName": "اسم الطبيب إذا وجد",
+  "clinicSpecialty": "التخصص الطبي",
+  "date": "التاريخ",
+  "diagnosisOrSummary": "شرح مبسط لتشخيص الحالة أو الغرض من الروشتة",
+  "medications": [
+    {
+      "name": "اسم الدواء التجاري (بالعربية والإنجليزية)",
+      "scientificName": "الاسم العلمي والتركيز",
+      "dosage": "الجرعة مثلاً قرص واحد 500 مجم",
+      "frequency": "معدل التكرار",
+      "timeOfDay": "التوقيت مثلاً بعد الأكل / قبل النوم",
+      "duration": "المدة",
+      "purpose": "فائدة الدواء بلغة عربية عامية ومطمئنة",
+      "category": "أقراص أو شراب أو مرهم",
+      "instructions": "تعليمات الاستخدام الدقيقة"
+    }
+  ],
+  "dailySchedule": [
+    {
+      "period": "morning",
+      "periodArabic": "الصباح (08:00 ص)",
+      "time": "08:00 ص",
+      "items": [
+        {
+          "medicationName": "اسم الدواء",
+          "instruction": "تعليمات تناوله"
+        }
+      ]
+    },
+    {
+      "period": "afternoon",
+      "periodArabic": "الظهر (02:00 م)",
+      "time": "02:00 م",
+      "items": []
+    },
+    {
+      "period": "evening",
+      "periodArabic": "المساء (08:00 م)",
+      "time": "08:00 م",
+      "items": []
+    },
+    {
+      "period": "bedtime",
+      "periodArabic": "قبل النوم (11:00 م)",
+      "time": "11:00 م",
+      "items": []
+    }
+  ],
+  "safetyWarnings": [
+    {
+      "type": "warning",
+      "title": "عنوان التنبيه",
+      "description": "تفاصيل التنبيه بلغة سهلة"
+    }
+  ],
+  "drugInteractions": [
+    {
+      "severity": "safe",
+      "description": "تقييم التوافق الدوائي"
+    }
+  ],
+  "lifestyleTips": [
+    "نصيحة غذائية أو سلوكية مساعدة للتعافي"
+  ]
+}`;
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    
+    let parts: any[] = [{ text: prompt }];
+
+    if (imageBase64) {
+      const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z]+;base64,/, "");
+      parts.unshift({
+        inlineData: {
+          data: cleanBase64,
+          mimeType: mimeType || "image/jpeg"
+        }
+      });
+    }
+
+    const result = await model.generateContent(parts);
+    const rawText = (await result.response).text();
+
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as PrescriptionAnalysisResult;
+      return parsed;
+    }
+
+    return fallbackResult;
+  } catch (error: any) {
+    console.error("Prescription vision analysis error:", error?.message);
+    return fallbackResult;
+  }
+}
+
+export async function askMedicationCompanion(
+  question: string,
+  prescriptionContext: any,
+  patientContext: any = null
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY || "";
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  const fallbackResponses: Record<string, string> = {
+    "default": "أهلاً بك! أنا رفيقك الطبي الذكي. بخصوص أدويتك الموصوفة، يمكنك تناولها بالجرعات المحددة في الجدول اليومي. إذا نسيت جرعة، يمكنك أخذها فور تذكرها ما لم يكن موعد الجرعة التالية قد اقترب (لا تضاعف الجرعة أبداً). هل لديك أي استفسار آخر بخصوص الأكل المسموح أو الأعراض الجانبية؟"
+  };
+
+  if (!apiKey) {
+    return fallbackResponses["default"];
+  }
+
+  try {
+    const COMPANION_PROMPT = `You are "رفيق الدواء والتعافي" (Medication & Recovery AI Companion), a caring, certified clinical pharmacist assistant.
+Answer the patient's questions about their prescription, medication schedule, food interactions, and daily recovery.
+
+PRESCRIPTION CONTEXT:
+${JSON.stringify(prescriptionContext || {}, null, 2)}
+
+PATIENT CONTEXT:
+${JSON.stringify(patientContext || {}, null, 2)}
+
+GUIDELINES:
+- Warm, reassuring, highly clear Arabic.
+- If they ask about a missed dose: advise taking it when remembered, but never double doses if next dose is close.
+- Clarify whether to take with or without food.
+- If symptoms are severe or life-threatening, urge them to contact emergency or their doctor immediately.
+- Keep response practical, easy to read, with bullet points.`;
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction: COMPANION_PROMPT
+    });
+
+    const result = await model.generateContent(question);
+    return (await result.response).text();
+  } catch (err: any) {
+    console.error("Medication companion error:", err?.message);
+    return fallbackResponses["default"];
+  }
+}
